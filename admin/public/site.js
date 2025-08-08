@@ -5,10 +5,9 @@
 
 		$('#connector-version').text('v' + p);
 
-		$.get('https://api.github.com/repos/auth0/ad-ldap-connector/releases/latest?_=' + new Date().getTime(), function(data) {
+		$.get('https://api.github.com/repos/lostinauth0/ad-ldap-connector/releases/latest?_=' + new Date().getTime(), function(data) {
 			var tab = $('#update-tab');
-			const installer = data.assets.find(asset => asset.name.endsWith('.msi'));
-			const latestVersion = installer.name.replace('adldap-v', '').replace('.msi', '');
+			const latestVersion = data.tag_name.substring(1);
 			if (tab.length > 0) {
 				tab.show();
 				tab.css('display', 'block');
