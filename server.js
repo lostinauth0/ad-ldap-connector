@@ -36,7 +36,7 @@ console.log('');
 console.log('======================== STARTING AD-LDAP CONNECTOR ========================');
 console.log('Maximum header size = ' + maxHeaderSize);
 
-connectorSetup.run(__dirname, function(err) {
+connectorSetup.run(__dirname, async function(err) {
   if(err) {
     console.log(err.message);
     return exit(2);
@@ -47,14 +47,16 @@ connectorSetup.run(__dirname, function(err) {
     return exit(1);
   }
 
-  if (!nconf.get('LDAP_BIND_USER') || !nconf.get('LDAP_BIND_CREDENTIALS')) {
-    if (!nconf.get('ANONYMOUS_SEARCH_ENABLED')){
-      console.error('Anonymous LDAP search is not enabled. Please edit config.json to add LDAP_BIND_USER');
-      return exit(1);
-    }
-    else{
-      console.log('Anonymous LDAP search is enabled. LDAP_BIND_USER is not required');
-    }
+  if (!nconf.get('ANONYMOUS_SEARCH_ENABLED') && !nconf.get('LDAP_BIND_USER')) {
+    console.error('Anonymous LDAP search is not enabled. Please edit config.json to add LDAP_BIND_USER');
+    return exit(1);
+  }
+
+  try {
+    await require('./lib/ldap').initialize();
+  } catch (e) {
+    console.error(e.message);
+    return exit(1);
   }
 
   require('./lib/clock_skew_detector');

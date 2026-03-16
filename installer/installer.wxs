@@ -51,6 +51,14 @@
       <Directory Id='ProgramFilesFolder' Name='PFiles'>
         <Directory Id='Auth0_Folder' Name='Auth0'>
           <Directory Id='INSTALLDIR' Name='AD LDAP Connector'>
+            <Component Id="InstallDirPermissions" Guid="{9A3C8D17-5E2B-4F10-B3C6-2D7E9F4A8B21}" KeyPath="yes">
+              <CreateFolder>
+                <!-- Remove inherited ACEs (strips Users read access from Program Files inheritance),
+                     then grant explicit full control only to Administrators and SYSTEM. -->
+                <util:PermissionEx User="Administrators" GenericAll="yes" ReplaceInheritedPermissions="yes" />
+                <util:PermissionEx User="SYSTEM" GenericAll="yes" />
+              </CreateFolder>
+            </Component>
           </Directory>
         </Directory>
       </Directory>
@@ -84,6 +92,7 @@
     <Feature Id='Complete' Level='1'>
       <ComponentGroupRef Id='MainComponentGroup' />
       <ComponentRef Id="ApplicationShortcut" />
+      <ComponentRef Id="InstallDirPermissions" />
       <Component Id="node_component" Guid="{07D39FFF-C0C2-4D3F-BC22-EC7AE4963FFF}" Directory="INSTALLDIR">
         <File Id="node" KeyPath="yes" Source="$(var.NodeBin)" />
       </Component>

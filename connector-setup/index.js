@@ -2,6 +2,7 @@ require('colors');
 
 const nconf = require('nconf');
 const crypto = require('../lib/crypto');
+const keychain = require('cross-keychain');
 const program = require('commander');
 const async = require('async');
 const axios = require('axios');
@@ -242,11 +243,12 @@ exports.run = function (workingPath, callback) {
       },
       function (cb) {
         var password = nconf.get('LDAP_BIND_PASSWORD');
-        if (password) {
-          nconf.clear('LDAP_BIND_PASSWORD');
-          nconf.set('LDAP_BIND_CREDENTIALS', crypto.encrypt(password));
-        }
-        cb();
+        if (!password) return cb();
+        nconf.clear('LDAP_BIND_PASSWORD');
+        nconf.clear('LDAP_BIND_CREDENTIALS');
+        keychain.setPassword('auth0-ad-ldap-connector', 'ldap-bind-credentials', password)
+          .then(function () { cb(); })
+          .catch(cb);
       },
       function (cb) {
         configureConnection(program, workingPath, info, provisioningTicket, cb);

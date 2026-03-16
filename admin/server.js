@@ -25,6 +25,8 @@ var app = express();
 var freeport = require('freeport');
 var test_config = require('./test_config');
 var Users = require('../lib/users');
+const keychain = require('cross-keychain');
+const bcrypt = require('bcryptjs');
 
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
@@ -38,6 +40,7 @@ app.use(
 );
 var csrfProtection = csrf({ cookie: true });
 var detected_settings = {};
+var adminConfigured = false;
 
 if (process.platform === 'win32') {
   exec(
@@ -129,6 +132,72 @@ function run(cmd, args, callback) {
   });
 }
 
+function requireAuth(req, res, next) {
+  if (!adminConfigured) return res.redirect('/setup');
+  if (!req.session.authenticated) return res.redirect('/login');
+  next();
+}
+
+app.get('/setup', csrfProtection, function (req, res) {
+  if (adminConfigured) return res.redirect('/');
+  res.render('setup', { csrfToken: req.csrfToken() });
+});
+
+app.post('/setup', csrfProtection, function (req, res) {
+  if (adminConfigured) return res.redirect('/');
+  var password = req.body.password;
+  var confirm  = req.body.confirm;
+  if (!password || password.length < 8) {
+    return res.render('setup', { csrfToken: req.csrfToken(), ERROR: 'Password must be at least 8 characters.' });
+  }
+  if (password !== confirm) {
+    return res.render('setup', { csrfToken: req.csrfToken(), ERROR: 'Passwords do not match.' });
+  }
+  bcrypt.hash(password, 12)
+    .then(function (hash) {
+      return keychain.setPassword('auth0-ad-ldap-connector', 'admin-password', hash);
+    })
+    .then(function () {
+      adminConfigured = true;
+      res.redirect('/login');
+    })
+    .catch(function (err) {
+      res.render('setup', { csrfToken: req.csrfToken(), ERROR: err.message });
+    });
+});
+
+app.get('/login', csrfProtection, function (req, res) {
+  if (!adminConfigured) return res.redirect('/setup');
+  if (req.session.authenticated) return res.redirect('/');
+  res.render('login', { csrfToken: req.csrfToken() });
+});
+
+app.post('/login', csrfProtection, function (req, res) {
+  if (!adminConfigured) return res.redirect('/setup');
+  keychain.getPassword('auth0-ad-ldap-connector', 'admin-password')
+    .then(function (hash) {
+      if (!hash) throw new Error('Admin password not found in keychain.');
+      return bcrypt.compare(req.body.password || '', hash);
+    })
+    .then(function (match) {
+      if (!match) {
+        return res.render('login', { csrfToken: req.csrfToken(), ERROR: 'Invalid password.' });
+      }
+      req.session.authenticated = true;
+      res.redirect('/');
+    })
+    .catch(function (err) {
+      res.render('login', { csrfToken: req.csrfToken(), ERROR: err.message });
+    });
+});
+
+app.get('/logout', function (req, res) {
+  req.session.destroy();
+  res.redirect('/login');
+});
+
+app.use(requireAuth);
+
 app.get('/', set_current_config, csrfProtection, function (req, res) {
   console.log(req.session.LDAP_RESULTS);
   res.render(
@@ -186,6 +255,21 @@ app.post(
       req.body.PORT = port;
       next();
     });
+  },
+  function (req, res, next) {
+    var password = req.body.LDAP_BIND_PASSWORD;
+    if (!password) return next();
+    keychain.setPassword('auth0-ad-ldap-connector', 'ldap-bind-credentials', password)
+      .then(function () {
+        delete req.body.LDAP_BIND_PASSWORD;
+        delete req.body.LDAP_BIND_CREDENTIALS;
+        delete req.current_config.LDAP_BIND_CREDENTIALS;
+        require('../lib/ldap').resetCredentials();
+        next();
+      })
+      .catch(function (err) {
+        res.render('index', xtend(req.current_config, req.body, { ERROR: err.message }));
+      });
   },
   merge_config
 );
@@ -666,10 +750,55 @@ app.get('/users/by-login', function (req, res) {
   });
 });
 
+app.post('/password', set_current_config, csrfProtection, function (req, res) {
+  var current = req.body.current_password  || '';
+  var newPass  = req.body.new_password     || '';
+  var confirm  = req.body.confirm_password || '';
+
+  function renderError(msg) {
+    res.render('index', xtend(req.current_config, {
+      csrfToken: req.csrfToken(),
+      ERROR: msg,
+    }));
+  }
+
+  if (newPass.length < 8) return renderError('New password must be at least 8 characters.');
+  if (newPass !== confirm) return renderError('Passwords do not match.');
+
+  keychain.getPassword('auth0-ad-ldap-connector', 'admin-password')
+    .then(function (hash) {
+      if (!hash) throw new Error('Admin password not found in keychain.');
+      return bcrypt.compare(current, hash);
+    })
+    .then(function (match) {
+      if (!match) throw new Error('Current password is incorrect.');
+      return bcrypt.hash(newPass, 12);
+    })
+    .then(function (hash) {
+      return keychain.setPassword('auth0-ad-ldap-connector', 'admin-password', hash);
+    })
+    .then(function () {
+      res.redirect('/?s=1');
+    })
+    .catch(function (err) {
+      renderError(err.message);
+    });
+});
+
 cas.inject(function (err) {
   if (err) console.log('Custom CA certificates were not loaded', err);
 
-  http.createServer(app).listen(8357, '127.0.0.1', function () {
-    console.log('Listening on http://localhost:8357.');
-  });
+  keychain.getPassword('auth0-ad-ldap-connector', 'admin-password')
+    .then(function (hash) {
+      adminConfigured = (hash !== null);
+      http.createServer(app).listen(8357, '127.0.0.1', function () {
+        console.log('Listening on http://localhost:8357.');
+      });
+    })
+    .catch(function (err) {
+      console.error('Failed to check admin keychain:', err.message);
+      http.createServer(app).listen(8357, '127.0.0.1', function () {
+        console.log('Listening on http://localhost:8357.');
+      });
+    });
 });
