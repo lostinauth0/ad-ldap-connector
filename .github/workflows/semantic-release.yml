@@ -2,6 +2,7 @@ name: Semantic Release
 on:
   push:
     branches:
+      - beta-*
       - master
 jobs:
   Semantic-Release:
@@ -59,5 +60,14 @@ jobs:
           ./build.ps1
           mv output/adldap.msi "output/adldap-v$packageVersion.msi"
           ls output
+        shell: pwsh
+      - name: Publish Github Release (only master)
+        if: ${{ steps.semantic_release.outputs.PACKAGE_VERSION != '0.0.0' && github.ref == 'refs/heads/master' }}
+        env:
+          GITHUB_TOKEN: ${{ github.TOKEN }}
+          PACKAGE_VERSION: ${{ steps.semantic_release.outputs.PACKAGE_VERSION }}
+        run: |
+          $packageVersion = $env:PACKAGE_VERSION
+          echo "Release version is $packageVersion"
           gh release upload "v$packageVersion" "output/adldap-v$packageVersion.msi"
         shell: pwsh
