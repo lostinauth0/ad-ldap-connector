@@ -37,7 +37,7 @@ rm $tmpInstallSourcesDir\config.json.enc -ErrorAction Ignore
 $nodeBin = (gcm node).Path
 $nssmBin = "$InstallerPath\nssm.exe"
 
-nvm use && npm --no-color prune --production
+npm --no-color prune --production
 
 #Generate the installer
 . "heat.exe" dir $tmpInstallSourcesDir -srd -dr INSTALLDIR -cg MainComponentGroup -out $InstallerPath\directory.wxs -ke -sfrag -gg -var var.SourceDir -sreg -scom
