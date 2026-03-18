@@ -23,7 +23,7 @@ jobs:
           node-version-file: .nvmrc
       - name: Application Dependencies
         run: |
-          npm ci
+          nvm use && npm ci
       - name: Semantic Release
         id: semantic_release
         env:

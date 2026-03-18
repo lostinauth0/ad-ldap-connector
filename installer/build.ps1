@@ -11,14 +11,14 @@ if ($version -eq "0.0.0") {
 }
 
 # create output dir
-rm -Recurse -Force output
+rm -Recurse -Force output -ErrorAction Ignore
 mkdir output | Out-Null
 
 # Create a temp directory with files we pass to the installer, this is what will 
 # eventually end up in the install location on the end user's machine. 
 # We do this to exclude files we don't want in the installer and to make sure we have a clean directory to work with.
 $tmpInstallSourcesDir = [io.path]::GetTempFileName()
-rm $tmpInstallSourcesDir
+rm $tmpInstallSourcesDir -ErrorAction Ignore
 mkdir $tmpInstallSourcesDir | Out-Null
 
 echo "Project path is $ProjectPath"
@@ -37,7 +37,7 @@ rm $tmpInstallSourcesDir\config.json.enc -ErrorAction Ignore
 $nodeBin = (gcm node).Path
 $nssmBin = "$InstallerPath\nssm.exe"
 
-npm --no-color prune --production
+nvm use && npm --no-color prune --production
 
 #Generate the installer
 . "heat.exe" dir $tmpInstallSourcesDir -srd -dr INSTALLDIR -cg MainComponentGroup -out $InstallerPath\directory.wxs -ke -sfrag -gg -var var.SourceDir -sreg -scom
