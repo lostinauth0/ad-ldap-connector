@@ -24,7 +24,6 @@ jobs:
       - name: Application Dependencies
         run: |
           npm ci
-          npm i -g rimraf
       - name: Semantic Release
         id: semantic_release
         env:
@@ -44,7 +43,6 @@ jobs:
           echo "Release version is $packageVersion"
           choco install wixtoolset
           cd installer
-          ./prepare.ps1
           Import-Module "$env:ChocolateyInstall/helpers/chocolateyInstaller.psm1"
           refreshenv
         shell: pwsh

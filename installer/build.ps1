@@ -1,69 +1,50 @@
 $ErrorActionPreference = "Stop"
-# $PSScriptRoot = Split-Path -Parent -Path $MyInvocation.MyCommand.Definition
 
 $ProjectPath = [System.IO.Path]::GetFullPath("$PSScriptRoot\..\") -replace "\\$"
 $ProjectPathUnix = $ProjectPath.replace("\", "/")
 $InstallerPath = "$ProjectPath\installer"
 
-echo "Installer path is $InstallerPath"
+$version = ((. "node" -e "console.log(require('$ProjectPathUnix/package.json').version);") | Out-String).Trim()
 
-# remember to manually remove this after npm install... it fails because the path is too long.
-# rimraf "..\node_modules\jsonwebtoken\node_modules\jws\node_modules\base64url\node_modules\tap"
+if ($version -eq "0.0.0") {
+    throw "Invalid or default version in package.json: $version. If you are building this locally, update the version field in package.json temporarily to a valid version above 0.0.0"
+}
 
-#Clean
-@(
-    'output'
-    'adldap.msi'
-    'directory.wxs'
-) |
-Where-Object { Test-Path $_ } |
-ForEach-Object { rimraf $_ }
-
-#create output dir
+# create output dir
+rm -Recurse -Force output
 mkdir output | Out-Null
 
-#Create a tmpdir
-$tmp_dir = [io.path]::GetTempFileName()
-Remove-Item $tmp_dir
-mkdir $tmp_dir | Out-Null
+# Create a temp directory with files we pass to the installer, this is what will 
+# eventually end up in the install location on the end user's machine. 
+# We do this to exclude files we don't want in the installer and to make sure we have a clean directory to work with.
+$tmpInstallSourcesDir = [io.path]::GetTempFileName()
+rm $tmpInstallSourcesDir
+mkdir $tmpInstallSourcesDir | Out-Null
 
-rimraf $ProjectPath\node_modules\edge\test
-rimraf $ProjectPath\node_modules\leveldown\build\Release\obj
-rimraf $ProjectPath\node_modules\leveldown\deps
-rimraf $ProjectPath\node_modules\leveldown\build\Release\leveldb.lib
+echo "Project path is $ProjectPath"
+echo "Installer path is $InstallerPath"
+echo "Temp install sources path is $tmpInstallSourcesDir"
+
+#Copy excluding .git and installer
+cp $ProjectPath\* $tmpInstallSourcesDir -Recurse -Force -Exclude .git, .github, installer, *.log,*.wixobj,*.wxs,*.msi,*.exe
+ls $tmpInstallSourcesDir
+
+rm $tmpInstallSourcesDir\bin -Recurse -ErrorAction Ignore
+rm $tmpInstallSourcesDir\config.json -ErrorAction Ignore
+rm $tmpInstallSourcesDir\*.log -ErrorAction Ignore
+rm $tmpInstallSourcesDir\config.json.enc -ErrorAction Ignore
+
+$nodeBin = (gcm node).Path
+$nssmBin = "$InstallerPath\nssm.exe"
 
 npm --no-color prune --production
 
-#Copy excluding .git and installer
-robocopy $ProjectPath\ $tmp_dir /COPYALL /S /NFL /NDL /NS /NC /NJH /NJS /XD .git installer
-
-If (Test-Path $tmp_dir\bin){
-    rimraf $tmp_dir\bin
-}
-
-If (Test-Path $tmp_dir\config.json){
-    rimraf $tmp_dir\config.json
-}
-
-If (Test-Path $tmp_dir\logs.log){
-    rimraf $tmp_dir\logs.log
-}
-
-rimraf $tmp_dir\config.json.enc
-
-$version = (. "node" -e "console.log(require('$ProjectPathUnix/package.json').version);") | Out-String
-
-$version = $version.Trim()
-
-$nodeBin = (gcm node).Path
-
 #Generate the installer
-. "heat.exe" dir $tmp_dir -srd -dr INSTALLDIR -cg MainComponentGroup -out $InstallerPath\directory.wxs -ke -sfrag -gg -var var.SourceDir -sreg -scom
-. "candle.exe" -dNodeBin="$nodeBin" -dSourceDir="$tmp_dir" -dProductVersion="$version" -dRTMProductVersion="0.0.0" -dUpgradeCode="{1072AB9E-1842-4AFA-9CF2-545462CD60E2}" $InstallerPath\*.wxs -o $InstallerPath\output\ -ext WiXUtilExtension
+. "heat.exe" dir $tmpInstallSourcesDir -srd -dr INSTALLDIR -cg MainComponentGroup -out $InstallerPath\directory.wxs -ke -sfrag -gg -var var.SourceDir -sreg -scom
+. "candle.exe" -dNodeBin="$nodeBin" -dNssmBin="$nssmBin" -dSourceDir="$tmpInstallSourcesDir" -dProductVersion="$version" -dRTMProductVersion="0.0.0" -dUpgradeCode="{1072AB9E-1842-4AFA-9CF2-545462CD60E2}" $InstallerPath\*.wxs -o $InstallerPath\output\ -ext WiXUtilExtension
 . "light.exe" -o $InstallerPath\output\adldap.msi $InstallerPath\output\*.wixobj -cultures:en-US -ext WixUIExtension.dll -ext WiXUtilExtension -ext WiXNetFxExtension
-# . "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe" sign /n "Auth0" $InstallerPath\output\adldap.msi
 
 #Remove the temp
 echo "removing temp folder"
-rimraf $tmp_dir
+rm -Recurse -Force $tmpInstallSourcesDir
 echo "temp folder removed"
