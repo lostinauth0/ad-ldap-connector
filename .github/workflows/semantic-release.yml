@@ -46,7 +46,9 @@ jobs:
               } else {
                 $packageVersion = $rawVersion
               }
-              npm version $packageVersion --no-git-tag-version
+              $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+              $pkg.version = $packageVersion
+              $pkg | ConvertTo-Json -Depth 100 | Set-Content package.json
             } else {
               $packageVersion = "0.0.0"
             }
