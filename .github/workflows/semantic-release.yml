@@ -29,8 +29,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npx semantic-release
-          $packageVersion = $(node -e "console.log(require('./package.json').version);")
+          if ("${{ github.ref }}" -eq "refs/heads/master") {
+            npx semantic-release
+            $packageVersion = $(node -e "console.log(require('./package.json').version);")
+          } else {
+            # Dry run on non-master branches: extract version without creating a tag
+            $output = npx semantic-release --dry-run 2>&1 | Out-String
+            Write-Host $output
+            $versionMatch = [regex]::Match($output, 'next release version is (\S+)')
+            if ($versionMatch.Success) {
+              $rawVersion = $versionMatch.Groups[1].Value
+              # Transform A.B.C-branch-name.D -> A.B.C.D
+              $semverMatch = [regex]::Match($rawVersion, '^(\d+\.\d+\.\d+)-(.+)\.(\d+)$')
+              if ($semverMatch.Success) {
+                $packageVersion = "$($semverMatch.Groups[1].Value).$($semverMatch.Groups[3].Value)"
+              } else {
+                $packageVersion = $rawVersion
+              }
+            } else {
+              $packageVersion = "0.0.0"
+            }
+          }
           echo "PACKAGE_VERSION=$packageVersion" >> $env:GITHUB_OUTPUT
           echo "Release version is $packageVersion"
         shell: pwsh
