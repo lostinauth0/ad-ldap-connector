@@ -91,3 +91,10 @@ jobs:
           echo "Release version is $packageVersion"
           gh release upload "v$packageVersion" "output/adldap-v$packageVersion.msi"
         shell: pwsh
+      - name: Upload Installer Artifact (non-master)
+        if: ${{ steps.semantic_release.outputs.PACKAGE_VERSION != '0.0.0' && github.ref != 'refs/heads/master' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #4.6.2
+        with:
+          name: adldap-v${{ steps.semantic_release.outputs.PACKAGE_VERSION }}
+          path: installer/output/adldap-v${{ steps.semantic_release.outputs.PACKAGE_VERSION }}.msi
+          retention-days: 2
