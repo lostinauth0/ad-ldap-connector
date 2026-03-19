@@ -46,6 +46,7 @@ jobs:
               } else {
                 $packageVersion = $rawVersion
               }
+              npm version $packageVersion --no-git-tag-version
             } else {
               $packageVersion = "0.0.0"
             }
