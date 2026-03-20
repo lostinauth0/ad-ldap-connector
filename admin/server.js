@@ -788,6 +788,11 @@ app.post('/password', set_current_config, csrfProtection, function (req, res) {
 cas.inject(function (err) {
   if (err) console.log('Custom CA certificates were not loaded', err);
 
+  require('../lib/ldap').initialize()
+    .catch(function (err) {
+      console.warn('Could not migrate LDAP credentials at startup:', err.message);
+    });
+
   keychain.getPassword('auth0-ad-ldap-connector', 'admin-password')
     .then(function (hash) {
       adminConfigured = (hash !== null);
