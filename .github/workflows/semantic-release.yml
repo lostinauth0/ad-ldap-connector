@@ -42,7 +42,7 @@ jobs:
               # Transform A.B.C-branch-name.D -> A.B.C.D
               $semverMatch = [regex]::Match($rawVersion, '^(\d+\.\d+\.\d+)-(.+)\.(\d+)$')
               if ($semverMatch.Success) {
-                $packageVersion = "$($semverMatch.Groups[1].Value).$($semverMatch.Groups[3].Value)"
+                $packageVersion = "$($semverMatch.Groups[1].Value).$(Get-Date -Format 'yyyyMMddHHmm')"
               } else {
                 $packageVersion = $rawVersion
               }
