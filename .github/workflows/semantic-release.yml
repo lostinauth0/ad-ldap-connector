@@ -42,7 +42,10 @@ jobs:
               # Transform A.B.C-branch-name.D -> A.B.C.D
               $semverMatch = [regex]::Match($rawVersion, '^(\d+\.\d+\.\d+)-(.+)\.(\d+)$')
               if ($semverMatch.Success) {
-                $packageVersion = "$($semverMatch.Groups[1].Value).$(Get-Date -Format 'yyyyMMddHHmm')"
+                # MMddHHmm format to ensure unique version for each build
+                # This isn't as nice as having full timestamp but we just need to differentiate between 
+                # beta builds (which are only relevant in small time periods) and don't want to exceed npm version limits
+                $packageVersion = "$($semverMatch.Groups[1].Value).$(Get-Date -Format 'MMddHHmm')"
               } else {
                 $packageVersion = $rawVersion
               }
