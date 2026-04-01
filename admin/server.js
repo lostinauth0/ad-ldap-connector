@@ -6,27 +6,41 @@ const multer = require('multer');
 const { Readable } = require('stream');
 const memoryStorage = multer.memoryStorage();
 const upload = multer({ memoryStorage });
-var unzipper = require('unzipper');
-var path = require('path');
-var archiver = require('archiver');
-var cas = require('../lib/add_certs');
-var csrf = require('csurf');
-var os = require('os');
-var fs = require('fs');
-var http = require('http');
-var express = require('express');
-var bodyParser = require('body-parser');
-var cookieParser = require('cookie-parser');
-var session = require('express-session');
-var xtend = require('xtend');
-var urlJoin = require('url-join');
-var exec = require('child_process').exec;
-var app = express();
-var freeport = require('freeport');
-var test_config = require('./test_config');
-var Users = require('../lib/users');
+const unzipper = require('unzipper');
+const path = require('path');
+const archiver = require('archiver');
+const cas = require('../lib/add_certs');
+const csrf = require('csurf');
+const os = require('os');
+const fs = require('fs');
+const http = require('http');
+const express = require('express');
+const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const xtend = require('xtend');
+const urlJoin = require('url-join');
+const exec = require('child_process').exec;
+const app = express();
+const freeport = require('freeport');
+const test_config = require('./test_config');
 const keychain = require('cross-keychain');
 const bcrypt = require('bcryptjs');
+const { PasswordPolicy, charsets } = require('password-sheriff');
+
+const BCRYPT_SALT_ROUNDS = 12;
+const passwordPolicy = new PasswordPolicy({
+  length: { minLength: 8 },
+  contains: {
+    expressions: [
+      charsets.lowerCase,
+      charsets.upperCase,
+      charsets.specialCharacters,
+    ],
+  },
+});
+
+var Users = require('../lib/users');
 
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
@@ -38,7 +52,7 @@ app.use(
     secret: 'sojo sut ed oterces le',
   })
 );
-var csrfProtection = csrf({ cookie: true });
+const csrfProtection = csrf({ cookie: true });
 var detected_settings = {};
 var adminConfigured = false;
 
@@ -147,13 +161,13 @@ app.post('/setup', csrfProtection, function (req, res) {
   if (adminConfigured) return res.redirect('/');
   var password = req.body.password;
   var confirm  = req.body.confirm;
-  if (!password || password.length < 8) {
-    return res.render('setup', { csrfToken: req.csrfToken(), ERROR: 'Password must be at least 8 characters.' });
+  if (!password || !passwordPolicy.check(password)) {
+    return res.render('setup', { csrfToken: req.csrfToken(), ERROR: 'Password must be at least 8 characters long, contain uppercase and lowercase letters, and include at least one special character.' });
   }
   if (password !== confirm) {
     return res.render('setup', { csrfToken: req.csrfToken(), ERROR: 'Passwords do not match.' });
   }
-  bcrypt.hash(password, 12)
+  bcrypt.hash(password, BCRYPT_SALT_ROUNDS)
     .then(function (hash) {
       return keychain.setPassword('auth0-ad-ldap-connector', 'admin-password', hash);
     })
@@ -762,8 +776,12 @@ app.post('/password', set_current_config, csrfProtection, function (req, res) {
     }));
   }
 
-  if (newPass.length < 8) return renderError('New password must be at least 8 characters.');
-  if (newPass !== confirm) return renderError('Passwords do not match.');
+  if (!passwordPolicy.check(newPass)) {
+    return renderError('Password must be at least 8 characters long, contain uppercase and lowercase letters, and include at least one special character.');
+  }
+  if (newPass !== confirm) {
+    return renderError('Passwords do not match.');
+  }
 
   keychain.getPassword('auth0-ad-ldap-connector', 'admin-password')
     .then(function (hash) {
@@ -772,7 +790,7 @@ app.post('/password', set_current_config, csrfProtection, function (req, res) {
     })
     .then(function (match) {
       if (!match) throw new Error('Current password is incorrect.');
-      return bcrypt.hash(newPass, 12);
+      return bcrypt.hash(newPass, BCRYPT_SALT_ROUNDS);
     })
     .then(function (hash) {
       return keychain.setPassword('auth0-ad-ldap-connector', 'admin-password', hash);
