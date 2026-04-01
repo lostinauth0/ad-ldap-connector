@@ -23,7 +23,17 @@
           <% if (locals.ERROR) { %>
           <div class="alert alert-error"><%= locals.ERROR %></div>
           <% } %>
-          <div class="widget-box" style="max-width: 400px;">
+          <% if (locals.PASSWORD_ERRORS) { %>
+          <div class="alert alert-error">
+            <p style="margin-bottom:6px">Password does not meet requirements (at least 3 of 4 character types required):</p>
+            <ul style="margin:0;padding-left:18px">
+              <% locals.PASSWORD_ERRORS.forEach(function(rule) { %>
+              <li><%= rule.passed ? '✓' : '✗' %> <%= rule.label %></li>
+              <% }) %>
+            </ul>
+          </div>
+          <% } %>
+          <div class="widget-box">
             <div class="widget-title">
               <h5>Set Admin Password</h5>
             </div>
@@ -35,7 +45,18 @@
                   <label class="control-label" for="password">Password</label>
                   <div class="controls">
                     <input type="password" name="password" id="password" autofocus required minlength="8">
-                    <span class="help-block">Minimum 8 characters. Stored securely in the OS keychain.</span>
+                    <span class="help-block">
+                      <ul>
+                        <li>At least 8 characters</li>
+                        <li>At least 3 of the following:
+                          <ul>
+                            <li>Uppercase letters</li>
+                            <li>Lowercase letters</li>
+                            <li>Numbers</li>
+                            <li>Special characters</li>
+                          </li>
+                      </ul>
+                    </span>
                   </div>
                 </div>
                 <div class="control-group">

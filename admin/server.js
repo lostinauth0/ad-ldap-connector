@@ -26,19 +26,11 @@ const freeport = require('freeport');
 const test_config = require('./test_config');
 const keychain = require('cross-keychain');
 const bcrypt = require('bcryptjs');
-const { PasswordPolicy, charsets } = require('password-sheriff');
+const { PasswordPolicy } = require('password-sheriff');
+const passwordPolicies = require('auth0-password-policies');
 
 const BCRYPT_SALT_ROUNDS = 12;
-const passwordPolicy = new PasswordPolicy({
-  length: { minLength: 8 },
-  contains: {
-    expressions: [
-      charsets.lowerCase,
-      charsets.upperCase,
-      charsets.specialCharacters,
-    ],
-  },
-});
+const passwordPolicy = new PasswordPolicy(passwordPolicies.good);
 
 var Users = require('../lib/users');
 
@@ -109,6 +101,16 @@ function restart_server(cb) {
   cb();
 }
 
+function checkPasswordRules(password) {
+  return [
+    { label: 'At least 8 characters',    passed: password.length >= 8 },
+    { label: 'Lowercase letters (a-z)',   passed: /[a-z]/.test(password) },
+    { label: 'Uppercase letters (A-Z)',   passed: /[A-Z]/.test(password) },
+    { label: 'Numbers (0-9)',             passed: /[0-9]/.test(password) },
+    { label: 'Special characters',        passed: /[^a-zA-Z0-9]/.test(password) },
+  ];
+}
+
 function merge_config(req, res) {
   var new_config = xtend(req.current_config, req.body);
   fs.writeFileSync(
@@ -162,7 +164,7 @@ app.post('/setup', csrfProtection, function (req, res) {
   var password = req.body.password;
   var confirm  = req.body.confirm;
   if (!password || !passwordPolicy.check(password)) {
-    return res.render('setup', { csrfToken: req.csrfToken(), ERROR: 'Password must be at least 8 characters long, contain uppercase and lowercase letters, and include at least one special character.' });
+    return res.render('setup', { csrfToken: req.csrfToken(), PASSWORD_ERRORS: checkPasswordRules(password || '') });
   }
   if (password !== confirm) {
     return res.render('setup', { csrfToken: req.csrfToken(), ERROR: 'Passwords do not match.' });
@@ -777,7 +779,10 @@ app.post('/password', set_current_config, csrfProtection, function (req, res) {
   }
 
   if (!passwordPolicy.check(newPass)) {
-    return renderError('Password must be at least 8 characters long, contain uppercase and lowercase letters, and include at least one special character.');
+    return res.render('index', xtend(req.current_config, {
+      csrfToken: req.csrfToken(),
+      PASSWORD_ERRORS: checkPasswordRules(newPass),
+    }));
   }
   if (newPass !== confirm) {
     return renderError('Passwords do not match.');
