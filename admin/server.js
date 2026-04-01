@@ -30,7 +30,12 @@ const { PasswordPolicy } = require('password-sheriff');
 const passwordPolicies = require('auth0-password-policies');
 
 const BCRYPT_SALT_ROUNDS = 12;
-const passwordPolicy = new PasswordPolicy(passwordPolicies.good);
+const MAX_PASSWORD_LENGTH = 64;
+const SERVER_PORT = 8357;
+const passwordPolicy = new PasswordPolicy({
+  ...passwordPolicies.good,
+  maxLength: { maxBytes: MAX_PASSWORD_LENGTH },
+});
 
 var Users = require('../lib/users');
 
@@ -46,7 +51,7 @@ app.use(
 );
 const csrfProtection = csrf({ cookie: true });
 var detected_settings = {};
-var adminConfigured = false;
+var adminPasswordSet;
 
 if (process.platform === 'win32') {
   exec(
@@ -103,11 +108,12 @@ function restart_server(cb) {
 
 function checkPasswordRules(password) {
   return [
-    { label: 'At least 8 characters',    passed: password.length >= 8 },
-    { label: 'Lowercase letters (a-z)',   passed: /[a-z]/.test(password) },
-    { label: 'Uppercase letters (A-Z)',   passed: /[A-Z]/.test(password) },
-    { label: 'Numbers (0-9)',             passed: /[0-9]/.test(password) },
-    { label: 'Special characters',        passed: /[^a-zA-Z0-9]/.test(password) },
+    { label: 'At least 8 characters',         passed: password.length >= 8 },
+    { label: 'No more than 64 characters',     passed: password.length <= MAX_PASSWORD_LENGTH },
+    { label: 'Lowercase letters (a-z)',        passed: /[a-z]/.test(password) },
+    { label: 'Uppercase letters (A-Z)',        passed: /[A-Z]/.test(password) },
+    { label: 'Numbers (0-9)',                  passed: /[0-9]/.test(password) },
+    { label: 'Special characters',             passed: /[^a-zA-Z0-9]/.test(password) },
   ];
 }
 
@@ -149,18 +155,18 @@ function run(cmd, args, callback) {
 }
 
 function requireAuth(req, res, next) {
-  if (!adminConfigured) return res.redirect('/setup');
+  if (!adminPasswordSet) return res.redirect('/setup');
   if (!req.session.authenticated) return res.redirect('/login');
   next();
 }
 
 app.get('/setup', csrfProtection, function (req, res) {
-  if (adminConfigured) return res.redirect('/');
+  if (adminPasswordSet) return res.redirect('/');
   res.render('setup', { csrfToken: req.csrfToken() });
 });
 
 app.post('/setup', csrfProtection, function (req, res) {
-  if (adminConfigured) return res.redirect('/');
+  if (adminPasswordSet) return res.redirect('/');
   var password = req.body.password;
   var confirm  = req.body.confirm;
   if (!password || !passwordPolicy.check(password)) {
@@ -174,7 +180,7 @@ app.post('/setup', csrfProtection, function (req, res) {
       return keychain.setPassword('auth0-ad-ldap-connector', 'admin-password', hash);
     })
     .then(function () {
-      adminConfigured = true;
+      adminPasswordSet = true;
       res.redirect('/login');
     })
     .catch(function (err) {
@@ -183,13 +189,13 @@ app.post('/setup', csrfProtection, function (req, res) {
 });
 
 app.get('/login', csrfProtection, function (req, res) {
-  if (!adminConfigured) return res.redirect('/setup');
+  if (!adminPasswordSet) return res.redirect('/setup');
   if (req.session.authenticated) return res.redirect('/');
   res.render('login', { csrfToken: req.csrfToken() });
 });
 
 app.post('/login', csrfProtection, function (req, res) {
-  if (!adminConfigured) return res.redirect('/setup');
+  if (!adminPasswordSet) return res.redirect('/setup');
   keychain.getPassword('auth0-ad-ldap-connector', 'admin-password')
     .then(function (hash) {
       if (!hash) throw new Error('Admin password not found in keychain.');
@@ -808,7 +814,7 @@ app.post('/password', set_current_config, csrfProtection, function (req, res) {
     });
 });
 
-cas.inject(function (err) {
+cas.inject(async function (err) {
   if (err) console.log('Custom CA certificates were not loaded', err);
 
   require('../lib/ldap').initialize()
@@ -816,17 +822,14 @@ cas.inject(function (err) {
       console.warn('Could not migrate LDAP credentials at startup:', err.message);
     });
 
-  keychain.getPassword('auth0-ad-ldap-connector', 'admin-password')
-    .then(function (hash) {
-      adminConfigured = (hash !== null);
-      http.createServer(app).listen(8357, '127.0.0.1', function () {
-        console.log('Listening on http://localhost:8357.');
-      });
-    })
-    .catch(function (err) {
-      console.error('Failed to check admin keychain:', err.message);
-      http.createServer(app).listen(8357, '127.0.0.1', function () {
-        console.log('Listening on http://localhost:8357.');
-      });
-    });
+  try {
+    const hash = await keychain.getPassword('auth0-ad-ldap-connector', 'admin-password');
+    adminPasswordSet = (hash !== null);
+  } catch (err) {
+    console.error('Failed to check admin keychain:', err.message);
+  }
+
+  http.createServer(app).listen(SERVER_PORT, '127.0.0.1', function () {
+    console.log('Listening on http://localhost:8357.');
+  });
 });
