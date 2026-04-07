@@ -26,16 +26,9 @@ const freeport = require('freeport');
 const test_config = require('./test_config');
 const keychain = require('cross-keychain');
 const bcrypt = require('bcryptjs');
-const { PasswordPolicy } = require('password-sheriff');
-const passwordPolicies = require('auth0-password-policies');
 
 const BCRYPT_SALT_ROUNDS = 12;
-const MAX_PASSWORD_LENGTH = 64;
 const SERVER_PORT = 8357;
-const passwordPolicy = new PasswordPolicy({
-  ...passwordPolicies.good,
-  maxLength: { maxBytes: MAX_PASSWORD_LENGTH },
-});
 
 var Users = require('../lib/users');
 
@@ -106,17 +99,6 @@ function restart_server(cb) {
   cb();
 }
 
-function checkPasswordRules(password) {
-  return [
-    { label: 'At least 8 characters',         passed: password.length >= 8 },
-    { label: 'No more than 64 characters',     passed: password.length <= MAX_PASSWORD_LENGTH },
-    { label: 'Lowercase letters (a-z)',        passed: /[a-z]/.test(password) },
-    { label: 'Uppercase letters (A-Z)',        passed: /[A-Z]/.test(password) },
-    { label: 'Numbers (0-9)',                  passed: /[0-9]/.test(password) },
-    { label: 'Special characters',             passed: /[^a-zA-Z0-9]/.test(password) },
-  ];
-}
-
 function merge_config(req, res) {
   var new_config = xtend(req.current_config, req.body);
   fs.writeFileSync(
@@ -154,63 +136,61 @@ function run(cmd, args, callback) {
   });
 }
 
-function requireAuth(req, res, next) {
-  if (!adminPasswordSet) return res.redirect('/setup');
+async function getHashedAdminPassword() {
+  return await keychain.getPassword('auth0-ad-ldap-connector', 'admin-password');
+}
+
+async function requireAuth(req, res, next) {
+  if (!(await getHashedAdminPassword())) {
+    return res.redirect('/setup');
+  }
   if (!req.session.authenticated) return res.redirect('/login');
   next();
 }
 
-app.get('/setup', csrfProtection, function (req, res) {
-  if (adminPasswordSet) return res.redirect('/');
+async function requireAdminPasswordSet(req, res, next) {
+  if (!(await getHashedAdminPassword())) {
+    return res.redirect('/setup');
+  }
+  next();
+}
+
+app.get('/checkPasswordStrength', function (req, res) {
+  var password = req.query.password || '';
+  res.json(checkPasswordRules(password));
+});
+
+app.get('/setup', csrfProtection, async function (req, res) {
+  if (await getHashedAdminPassword()) {
+    return res.redirect('/');
+  }
   res.render('setup', { csrfToken: req.csrfToken() });
 });
 
-app.post('/setup', csrfProtection, function (req, res) {
-  if (adminPasswordSet) return res.redirect('/');
-  var password = req.body.password;
-  var confirm  = req.body.confirm;
-  if (!password || !passwordPolicy.check(password)) {
-    return res.render('setup', { csrfToken: req.csrfToken(), PASSWORD_ERRORS: checkPasswordRules(password || '') });
-  }
-  if (password !== confirm) {
-    return res.render('setup', { csrfToken: req.csrfToken(), ERROR: 'Passwords do not match.' });
-  }
-  bcrypt.hash(password, BCRYPT_SALT_ROUNDS)
-    .then(function (hash) {
-      return keychain.setPassword('auth0-ad-ldap-connector', 'admin-password', hash);
-    })
-    .then(function () {
-      adminPasswordSet = true;
-      res.redirect('/login');
-    })
-    .catch(function (err) {
-      res.render('setup', { csrfToken: req.csrfToken(), ERROR: err.message });
-    });
-});
 
-app.get('/login', csrfProtection, function (req, res) {
-  if (!adminPasswordSet) return res.redirect('/setup');
-  if (req.session.authenticated) return res.redirect('/');
+app.get('/login', csrfProtection, requireAdminPasswordSet, function (req, res) {
+  if (req.session.authenticated) {
+    return res.redirect('/');
+  }
   res.render('login', { csrfToken: req.csrfToken() });
 });
 
-app.post('/login', csrfProtection, function (req, res) {
-  if (!adminPasswordSet) return res.redirect('/setup');
-  keychain.getPassword('auth0-ad-ldap-connector', 'admin-password')
-    .then(function (hash) {
-      if (!hash) throw new Error('Admin password not found in keychain.');
-      return bcrypt.compare(req.body.password || '', hash);
-    })
-    .then(function (match) {
-      if (!match) {
-        return res.render('login', { csrfToken: req.csrfToken(), ERROR: 'Invalid password.' });
-      }
-      req.session.authenticated = true;
-      res.redirect('/');
-    })
-    .catch(function (err) {
-      res.render('login', { csrfToken: req.csrfToken(), ERROR: err.message });
-    });
+app.post('/login', csrfProtection, requireAdminPasswordSet, async function (req, res) {
+
+  try {
+    const hashedAdminPassword = await getHashedAdminPassword();
+    if (!hashedAdminPassword) {
+      throw new Error('Admin password not found in keychain.');
+    }
+    const match = bcrypt.compare(req.body.password || '', hashedAdminPassword);
+    if (!match) {
+      return res.render('login', {csrfToken: req.csrfToken(), ERROR: 'Invalid password.'});
+    }
+    req.session.authenticated = true;
+    res.redirect('/');
+  } catch (err) {
+    res.render('login', { csrfToken: req.csrfToken(), ERROR: 'Incorrect admin password.' });
+  }
 });
 
 app.get('/logout', function (req, res) {
@@ -821,6 +801,21 @@ cas.inject(async function (err) {
     .catch(function (err) {
       console.warn('Could not migrate LDAP credentials at startup:', err.message);
     });
+
+  const pendingPasswordPath = path.join(__dirname, '.pending-admin-password');
+  if (fs.existsSync(pendingPasswordPath)) {
+    try {
+      const pendingHash = fs.readFileSync(pendingPasswordPath, 'utf8').trim();
+      if (pendingHash) {
+        await keychain.setPassword('auth0-ad-ldap-connector', 'admin-password', pendingHash);
+        console.log('Admin password set from installer.');
+      }
+    } catch (err) {
+      console.error('Failed to process pending admin password:', err.message);
+    } finally {
+      try { fs.unlinkSync(pendingPasswordPath); } catch (_) {}
+    }
+  }
 
   try {
     const hash = await keychain.getPassword('auth0-ad-ldap-connector', 'admin-password');

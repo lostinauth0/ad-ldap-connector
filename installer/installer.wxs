@@ -106,6 +106,28 @@
     <Property Id="WIXUI_TICKETURL" Secure="yes" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
 
+    <Property Id="ADMIN_PASSWORD" Secure="yes" />
+    <Property Id="ADMIN_PASSWORD_CONFIRM" Secure="yes" />
+    <Property Id="ADMIN_PASSWORD_ERROR" Value="" />
+
+    <CustomAction Id="StoreAdminPassword" Script="jscript" Return="ignore"><![CDATA[
+      try {
+        var shell = new ActiveXObject("WScript.Shell");
+        var installDir = Session.Property("INSTALLDIR");
+        var password = Session.Property("ADMIN_PASSWORD");
+        var env = shell.Environment("PROCESS");
+        env("AUTH0_ADMIN_SETUP_PASSWORD") = password;
+        var cmd = '"' + installDir + 'node.exe" "' + installDir + 'admin\\set-admin-password.js"';
+        var proc = shell.Exec(cmd);
+        while (proc.Status === 0) { WScript.Sleep(100); }
+        env("AUTH0_ADMIN_SETUP_PASSWORD") = "";
+        var output = proc.StdOut.ReadAll().replace(/^\s+|\s+$/g, "");
+        Session.Property("ADMIN_PASSWORD_ERROR") = output;
+      } catch (e) {
+        Session.Property("ADMIN_PASSWORD_ERROR") = "Failed to set password: " + (e.description || e.message || String(e));
+      }
+    ]]></CustomAction>
+
     <UIRef Id="WixUI" />
 
   </Product>
