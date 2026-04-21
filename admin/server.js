@@ -27,6 +27,7 @@ const test_config = require('./test_config');
 const keychain = require('cross-keychain');
 const bcrypt = require('bcryptjs');
 const passwordStrength = require('./passwordStrength');
+const ldap = require('../lib/ldap');
 
 const BCRYPT_SALT_ROUNDS = 12;
 const SERVER_PORT = 8357;
@@ -45,7 +46,6 @@ app.use(
 );
 const csrfProtection = csrf({ cookie: true });
 var detected_settings = {};
-var adminPasswordSet;
 
 if (process.platform === 'win32') {
   exec(
@@ -137,10 +137,31 @@ function run(cmd, args, callback) {
   });
 }
 
+/**
+ * Gets the hashed admin password from the keychain. If it doesn't exist, or is empty, returns null.
+ * @return {Promise<null|string>}
+ */
 async function getHashedAdminPassword() {
-  return await keychain.getPassword('auth0-ad-ldap-connector', 'admin-password');
+  try {
+    const hashedPassword = await keychain.getPassword('auth0-ad-ldap-connector', 'admin-password');
+    if (!hashedPassword) {
+      return null;
+    }
+    return hashedPassword;
+  } catch {
+    return null;
+  }
 }
 
+/**
+ * Middleware to require authentication for admin routes. If no admin password is set, redirects to the setup page.
+ * If the user is not authenticated, redirects to the login page.
+ *
+ * @param req
+ * @param res
+ * @param next
+ * @return {Promise<*>}
+ */
 async function requireAuth(req, res, next) {
   if (!(await getHashedAdminPassword())) {
     return res.redirect('/setup');
@@ -151,6 +172,16 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+/**
+ * Middleware to require that an admin password is set. If not, redirects to the setup page.
+ * Used for routes that are accessible without authentication but require an admin password to be set,
+ * such as the login page.
+ *
+ * @param req
+ * @param res
+ * @param next
+ * @return {Promise<*>}
+ */
 async function requireAdminPasswordSet(req, res, next) {
   if (!(await getHashedAdminPassword())) {
     return res.redirect('/setup');
@@ -194,6 +225,7 @@ app.get('/logout', function (req, res) {
   res.redirect('/login');
 });
 
+app.use(requireAdminPasswordSet);
 app.use(requireAuth);
 
 app.get('/', set_current_config, csrfProtection, function (req, res) {
@@ -263,7 +295,7 @@ app.post(
         delete req.body.LDAP_BIND_PASSWORD;
         delete req.body.LDAP_BIND_CREDENTIALS;
         delete req.current_config.LDAP_BIND_CREDENTIALS;
-        require('../lib/ldap').resetCredentials();
+        ldap.resetCredentials();
         next();
       })
       .catch(function (err) {
@@ -749,47 +781,46 @@ app.get('/users/by-login', function (req, res) {
   });
 });
 
-app.post('/password', set_current_config, csrfProtection, function (req, res) {
-  var current = req.body.current_password  || '';
-  var newPass  = req.body.new_password     || '';
-  var confirm  = req.body.confirm_password || '';
+app.post('/password', set_current_config, csrfProtection, async function (req, res) {
+  const currentPassword = req.body.current_password || '';
+  const newPassword = req.body.new_password || '';
+  const newPasswordConfirm = req.body.confirm_password || '';
 
   function renderError(msg) {
     res.redirect('/#security?error=' + encodeURIComponent(msg));
   }
 
-  if (!passwordStrength.validate(newPass)) {
-    return renderError(passwordStrength.validateToString(newPass));
+  if (!passwordStrength.validate(newPassword)) {
+    return renderError(passwordStrength.validateToString(newPassword));
   }
 
-  if (newPass !== confirm) {
+  if (newPassword !== newPasswordConfirm) {
     return renderError('Passwords do not match.');
   }
 
-  keychain.getPassword('auth0-ad-ldap-connector', 'admin-password')
-    .then(function (hash) {
-      if (!hash) throw new Error('Admin password not found in keychain.');
-      return bcrypt.compare(current, hash);
-    })
-    .then(function (match) {
-      if (!match) throw new Error('Current password is incorrect.');
-      return bcrypt.hash(newPass, BCRYPT_SALT_ROUNDS);
-    })
-    .then(function (hash) {
-      return keychain.setPassword('auth0-ad-ldap-connector', 'admin-password', hash);
-    })
-    .then(function () {
-      res.redirect('/?s=1');
-    })
-    .catch(function (err) {
-      renderError(err.message);
-    });
+  try {
+    const hashedPassword = await getHashedAdminPassword();
+    const match = await bcrypt.compare(currentPassword, hashedPassword || '');
+    if (!match) {
+      return renderError('Current password is incorrect.');
+    }
+    const hashedNewPassword = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
+    await keychain.setPassword('auth0-ad-ldap-connector', 'admin-password', hashedNewPassword);
+    res.redirect('/?s=1');
+  } catch (err) {
+    console.error(err);
+    return renderError('An error occurred while changing the password.');
+  }
 });
 
-cas.inject(async function (err) {
-  if (err) console.log('Custom CA certificates were not loaded', err);
+module.exports = app;
 
-  require('../lib/ldap').initialize()
+cas.inject(async function (err) {
+  if (err) {
+    console.log('Custom CA certificates were not loaded', err);
+  }
+
+  ldap.initialize()
     .catch(function (err) {
       console.warn('Could not migrate LDAP credentials at startup:', err.message);
     });
@@ -807,13 +838,6 @@ cas.inject(async function (err) {
     } finally {
       try { fs.unlinkSync(pendingPasswordPath); } catch (_) {}
     }
-  }
-
-  try {
-    const hash = await keychain.getPassword('auth0-ad-ldap-connector', 'admin-password');
-    adminPasswordSet = (hash !== null);
-  } catch (err) {
-    console.error('Failed to check admin keychain:', err.message);
   }
 
   http.createServer(app).listen(SERVER_PORT, '127.0.0.1', function () {
