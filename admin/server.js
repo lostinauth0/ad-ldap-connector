@@ -26,6 +26,7 @@ const freeport = require('freeport');
 const test_config = require('./test_config');
 const keychain = require('cross-keychain');
 const bcrypt = require('bcryptjs');
+const passwordStrength = require('./passwordStrength');
 
 const BCRYPT_SALT_ROUNDS = 12;
 const SERVER_PORT = 8357;
@@ -144,7 +145,9 @@ async function requireAuth(req, res, next) {
   if (!(await getHashedAdminPassword())) {
     return res.redirect('/setup');
   }
-  if (!req.session.authenticated) return res.redirect('/login');
+  if (!req.session.authenticated) {
+    return res.redirect('/login');
+  }
   next();
 }
 
@@ -155,18 +158,12 @@ async function requireAdminPasswordSet(req, res, next) {
   next();
 }
 
-app.get('/checkPasswordStrength', function (req, res) {
-  var password = req.query.password || '';
-  res.json(checkPasswordRules(password));
-});
-
 app.get('/setup', csrfProtection, async function (req, res) {
   if (await getHashedAdminPassword()) {
     return res.redirect('/');
   }
   res.render('setup', { csrfToken: req.csrfToken() });
 });
-
 
 app.get('/login', csrfProtection, requireAdminPasswordSet, function (req, res) {
   if (req.session.authenticated) {
@@ -176,13 +173,12 @@ app.get('/login', csrfProtection, requireAdminPasswordSet, function (req, res) {
 });
 
 app.post('/login', csrfProtection, requireAdminPasswordSet, async function (req, res) {
-
   try {
     const hashedAdminPassword = await getHashedAdminPassword();
     if (!hashedAdminPassword) {
       throw new Error('Admin password not found in keychain.');
     }
-    const match = bcrypt.compare(req.body.password || '', hashedAdminPassword);
+    const match = await bcrypt.compare(req.body.password || '', hashedAdminPassword);
     if (!match) {
       return res.render('login', {csrfToken: req.csrfToken(), ERROR: 'Invalid password.'});
     }
@@ -208,6 +204,7 @@ app.get('/', set_current_config, csrfProtection, function (req, res) {
       req.current_config,
       {
         SUCCESS: req.query && req.query.s === '1',
+        ERRORS: req.query && req.query.error ? [req.query.error] : null,
         LDAP_RESULTS: req.session.LDAP_RESULTS,
       },
       {
@@ -758,18 +755,13 @@ app.post('/password', set_current_config, csrfProtection, function (req, res) {
   var confirm  = req.body.confirm_password || '';
 
   function renderError(msg) {
-    res.render('index', xtend(req.current_config, {
-      csrfToken: req.csrfToken(),
-      ERROR: msg,
-    }));
+    res.redirect('/#security?error=' + encodeURIComponent(msg));
   }
 
-  if (!passwordPolicy.check(newPass)) {
-    return res.render('index', xtend(req.current_config, {
-      csrfToken: req.csrfToken(),
-      PASSWORD_ERRORS: checkPasswordRules(newPass),
-    }));
+  if (!passwordStrength.validate(newPass)) {
+    return renderError(passwordStrength.validateToString(newPass));
   }
+
   if (newPass !== confirm) {
     return renderError('Passwords do not match.');
   }

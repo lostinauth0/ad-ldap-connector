@@ -20,26 +20,12 @@
           <h1>AD LDAP Connector Configuration</h1>
         </div>
         <div class="container-fluid flat">
-          <% if (locals.ERROR) { %>
-          <div class="alert alert-error"><%= locals.ERROR %></div>
-          <% } %>
-          <% if (locals.PASSWORD_ERRORS) { %>
-          <div class="alert alert-error">
-            <p style="margin-bottom:6px">Password does not meet requirements:</p>
-            <ul style="margin:0;padding-left:18px">
-              <% locals.PASSWORD_ERRORS.forEach(function(rule) { %>
-              <li><%= rule.passed ? '✓' : '✗' %> <%= rule.label %></li>
-              <% }) %>
-            </ul>
-          </div>
-          <% } %>
           <div class="widget-box">
             <div class="widget-title">
               <h5>Set Admin Password</h5>
             </div>
             <div class="widget-content">
-              <p class="help-block">No admin password has been configured. Set a password to secure the admin console.</p>
-              <%- include('form_change_password', { askCurrentPassword: false }) -%>
+              <p class="help-block">No admin password has been configured. Please run the installer to set the admin console password.</p>
             </div>
           </div>
         </div>
