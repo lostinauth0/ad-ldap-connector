@@ -26,7 +26,7 @@ echo "Installer path is $InstallerPath"
 echo "Temp install sources path is $tmpInstallSourcesDir"
 
 #Copy excluding .git and installer
-cp $ProjectPath\* $tmpInstallSourcesDir -Recurse -Force -Exclude .git, .github, installer, *.log,*.wixobj,*.wxs,*.msi,*.exe
+cp $ProjectPath\* $tmpInstallSourcesDir -Recurse -Force -Exclude .git, .github, installer, *.log,*.wixobj,*.wxs,*.msi
 ls $tmpInstallSourcesDir
 
 rm $tmpInstallSourcesDir\bin -Recurse -ErrorAction Ignore
