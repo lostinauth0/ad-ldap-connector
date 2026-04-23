@@ -25,8 +25,39 @@ echo "Project path is $ProjectPath"
 echo "Installer path is $InstallerPath"
 echo "Temp install sources path is $tmpInstallSourcesDir"
 
-#Copy excluding .git and installer
-cp $ProjectPath\* $tmpInstallSourcesDir -Recurse -Force -Exclude .git, .github, installer, bin, config.json, config.json.enc, certs, *.log, *.wixobj, *.wxs, *.msi
+# Copy explicit allow list of files/dirs to include in the installer
+$itemsToCopy = @(
+    'admin',
+    'connector-setup',
+    'lib',
+    'node_modules',
+    'public',
+    'views',
+    '.jshintrc',
+    '.eslintrc',
+    '.nvmrc',
+    '.npmrc',
+    'CENTOS.md',
+    'CHANGELOG.md',
+    'endpoints.js',
+    'eventlog.js',
+    'latency_test.js',
+    'mock-ldap-server.js',
+    'LICENSE.rtf',
+    'LICENSE.txt',
+    'package.json',
+    'package-lock.json',
+    'README.md',
+    'server.js',
+    'troubleshoot.cmd',
+    'troubleshoot.js',
+    'update-connector.cmd',
+    'update-connector.ps1',
+    'ws_validator.js'
+)
+foreach ($item in $itemsToCopy) {
+    cp "$ProjectPath\$item" $tmpInstallSourcesDir -Recurse -Force
+}
 ls $tmpInstallSourcesDir
 
 $nodeBin = (gcm node).Path
