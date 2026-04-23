@@ -73,6 +73,10 @@
     <InstallExecuteSequence>
       <Custom Action='RegisterAdminService'
               Before='StartServices'>NOT Installed</Custom>
+      <Custom Action='ConfigureAdminServiceStdout'
+              After='RegisterAdminService'>NOT Installed</Custom>
+      <Custom Action='ConfigureAdminServiceStderr'
+              After='ConfigureAdminServiceStdout'>NOT Installed</Custom>
       <Custom Action='RegisterConnectorService'
               Before='StartServices'>NOT Installed</Custom>
       <Custom Action="WriteAdminPasswordFile"

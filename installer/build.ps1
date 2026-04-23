@@ -26,13 +26,8 @@ echo "Installer path is $InstallerPath"
 echo "Temp install sources path is $tmpInstallSourcesDir"
 
 #Copy excluding .git and installer
-cp $ProjectPath\* $tmpInstallSourcesDir -Recurse -Force -Exclude .git, .github, installer, *.log,*.wixobj,*.wxs,*.msi
+cp $ProjectPath\* $tmpInstallSourcesDir -Recurse -Force -Exclude .git, .github, installer, bin, config.json, config.json.enc, certs, *.log, *.wixobj, *.wxs, *.msi
 ls $tmpInstallSourcesDir
-
-rm $tmpInstallSourcesDir\bin -Recurse -ErrorAction Ignore
-rm $tmpInstallSourcesDir\config.json -ErrorAction Ignore
-rm $tmpInstallSourcesDir\*.log -ErrorAction Ignore
-rm $tmpInstallSourcesDir\config.json.enc -ErrorAction Ignore
 
 $nodeBin = (gcm node).Path
 $nssmBin = "$InstallerPath\nssm.exe"

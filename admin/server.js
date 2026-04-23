@@ -815,9 +815,16 @@ app.post('/password', set_current_config, csrfProtection, async function (req, r
 
 module.exports = app;
 
-cas.inject(async function (err) {
-  if (err) {
-    console.log('Custom CA certificates were not loaded', err);
+(async function initializeServer() {
+  const certErr = await new Promise(resolve => cas.inject(resolve));
+  if (certErr) {
+    console.error('Custom CA certificates were not loaded', certErr);
+  }
+
+  try {
+    await ldap.initialize();
+  } catch (err) {
+    console.error('Could not migrate LDAP credentials at startup:', err.message);
   }
 
   ldap.initialize()
@@ -843,4 +850,4 @@ cas.inject(async function (err) {
   http.createServer(app).listen(SERVER_PORT, '127.0.0.1', function () {
     console.log('Listening on http://localhost:8357.');
   });
-});
+})();
