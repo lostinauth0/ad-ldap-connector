@@ -1,5 +1,4 @@
-require("../lib/initConf");
-var nconf = require("nconf");
+const config = require("../lib/config");
 var expect = require("chai").expect;
 var Users = require("../lib/users");
 var mockLdapServer = require("./resources/mock_ldap_server");
@@ -9,17 +8,17 @@ var mockLdapServer = require("./resources/mock_ldap_server");
 // The test data is defined in ./resources/mock_ldap_data.json
 const PORT = 1389;
 
-nconf.set("LDAP_URL", `ldap://0.0.0.0:${PORT}`);
-nconf.set("LDAP_BASE", "dc=example,dc=org");
-nconf.set("LDAP_BIND_USER", "cn=admin,dc=example,dc=org");
-nconf.set("LDAP_BIND_PASSWORD", "admin");
-nconf.set("LDAP_USER_BY_NAME", "(&(objectClass=inetOrgPerson)(uid={0}))");
-nconf.set(
+config.set("LDAP_URL", `ldap://0.0.0.0:${PORT}`);
+config.set("LDAP_BASE", "dc=example,dc=org");
+config.set("LDAP_BIND_USER", "cn=admin,dc=example,dc=org");
+config.set("LDAP_BIND_PASSWORD", "admin");
+config.set("LDAP_USER_BY_NAME", "(&(objectClass=inetOrgPerson)(uid={0}))");
+config.set(
   "LDAP_SEARCH_QUERY",
   "(&(objectClass=inetOrgPerson)(|(cn={0})(givenName={0})(sn={0})(uid={0})))"
 );
-nconf.set("LDAP_SEARCH_ALL_QUERY", "(objectClass=inetOrgPerson)");
-nconf.set("LDAP_SEARCH_GROUPS", "(member={0})");
+config.set("LDAP_SEARCH_ALL_QUERY", "(objectClass=inetOrgPerson)");
+config.set("LDAP_SEARCH_GROUPS", "(member={0})");
 
 describe("users", function () {
   var server;

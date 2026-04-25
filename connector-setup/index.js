@@ -1,8 +1,6 @@
 require('colors');
 
-const nconf = require('nconf');
-const crypto = require('../lib/crypto');
-const keychain = require('cross-keychain');
+const config = require('../lib/config');
 const program = require('commander');
 const async = require('async');
 const axios = require('axios');
@@ -24,14 +22,14 @@ exports.run = function (workingPath, callback) {
 
   var emptyVars = ['LDAP_URL', 'LDAP_BASE', 'LDAP_BIND_USER'];
 
-  if (!nconf.get('LDAP_BIND_CREDENTIALS')) {
+  if (!config.get('LDAP_BIND_CREDENTIALS')) {
     emptyVars.concat(['LDAP_BIND_PASSWORD']);
   }
 
   async.series(
     [
       function (cb) {
-        provisioningTicket = nconf.get('PROVISIONING_TICKET');
+        provisioningTicket = config.get('PROVISIONING_TICKET');
 
         if (provisioningTicket) return cb();
 
@@ -113,8 +111,8 @@ exports.run = function (workingPath, callback) {
           });
       },
       function (cb) {
-        var ldap_url = nconf.get('LDAP_URL');
-        var ldap_base = nconf.get('LDAP_BASE');
+        var ldap_url = config.get('LDAP_URL');
+        var ldap_base = config.get('LDAP_BASE');
 
         if (ldap_url) return cb();
 
@@ -140,9 +138,9 @@ exports.run = function (workingPath, callback) {
                   function (dn) {
                     ldap_base = dn && dn.length > 0 ? dn : detectedDN;
 
-                    nconf.set('LDAP_BASE', ldap_base);
-                    nconf.set('LDAP_URL', ldap_url);
-                    nconf.save();
+                    config.set('LDAP_BASE', ldap_base);
+                    config.set('LDAP_URL', ldap_url);
+                    config.save();
 
                     if (console.inject) console.inject();
 
@@ -156,7 +154,7 @@ exports.run = function (workingPath, callback) {
       },
       function (cb) {
         function anonymousSearchEnabled(enabled) {
-          nconf.set('ANONYMOUS_SEARCH_ENABLED', enabled);
+          config.set('ANONYMOUS_SEARCH_ENABLED', enabled);
           console.log(
             'Is Anonymous LDAP search enabled? ' + (enabled ? 'yes' : 'no')
           );
@@ -170,7 +168,7 @@ exports.run = function (workingPath, callback) {
         };
         const connection = createConnection();
         connection.search(
-          nconf.get('LDAP_BASE'),
+          config.get('LDAP_BASE'),
           searchOpts,
           function (err, res) {
             if (err) {
@@ -195,7 +193,7 @@ exports.run = function (workingPath, callback) {
       },
       function (cb) {
         var do_not_configure_firewall =
-          nconf.get('FIREWALL_RULE_CREATED') ||
+          config.get('FIREWALL_RULE_CREATED') ||
           !info.kerberos ||
           process.platform !== 'win32';
 
@@ -220,43 +218,33 @@ exports.run = function (workingPath, callback) {
         cb();
       },
       function (cb) {
-        nconf.set('AD_HUB', info.adHub);
-        nconf.set('PROVISIONING_TICKET', provisioningTicket);
-        nconf.set('WSFED_ISSUER', info.connectionDomain);
-        nconf.set('CONNECTION', info.connectionName);
-        nconf.set('CLIENT_CERT_AUTH', info.certAuth);
-        nconf.set('KERBEROS_AUTH', info.kerberos);
-        nconf.set('FIREWALL_RULE_CREATED', info.kerberos);
-        nconf.set('REALM', info.realm.name);
-        nconf.set('SITE_NAME', nconf.get('SITE_NAME') || info.connectionName);
-        nconf.set(info.realm.name, info.realm.postTokenUrl);
+        config.set('AD_HUB', info.adHub);
+        config.set('PROVISIONING_TICKET', provisioningTicket);
+        config.set('WSFED_ISSUER', info.connectionDomain);
+        config.set('CONNECTION', info.connectionName);
+        config.set('CLIENT_CERT_AUTH', info.certAuth);
+        config.set('KERBEROS_AUTH', info.kerberos);
+        config.set('FIREWALL_RULE_CREATED', info.kerberos);
+        config.set('REALM', info.realm.name);
+        config.set('SITE_NAME', config.get('SITE_NAME') || info.connectionName);
+        config.set(info.realm.name, info.realm.postTokenUrl);
         emptyVars.forEach(function (ev) {
-          if (!nconf.get(ev)) nconf.set(ev, '');
+          if (!config.get(ev)) config.set(ev, '');
         });
 
-        nconf.save(cb);
-
+        config.save(cb);
         console.log('Local settings updated.');
       },
       function (cb) {
         certificate(workingPath, info, cb);
       },
       function (cb) {
-        var password = nconf.get('LDAP_BIND_PASSWORD');
-        if (!password) return cb();
-        nconf.clear('LDAP_BIND_PASSWORD');
-        nconf.clear('LDAP_BIND_CREDENTIALS');
-        keychain.setPassword('auth0-ad-ldap-connector', 'ldap-bind-credentials', password)
-          .then(function () { cb(); })
-          .catch(cb);
-      },
-      function (cb) {
         configureConnection(program, workingPath, info, provisioningTicket, cb);
       },
       function (cb) {
         console.log('Connector setup complete.');
-        if (nconf.get('OVERRIDE_CONFIG')) {
-          return nconf.save(cb);
+        if (config.get('OVERRIDE_CONFIG')) {
+          return config.save(cb);
         }
         cb();
       },

@@ -1,15 +1,6 @@
 const { assert } = require('chai');
 const proxyquire =  require('proxyquire');
 
-const mockNconf = {
-  values: {},
-  get: (key) => mockNconf.values[key],
-  set: (key, value) => {
-      mockNconf.values[key] = value;
-  },
-  '@global': true,
-}
-
 const key = `-----BEGIN RSA PRIVATE KEY-----
 MIIEogIBAAKCAQEAiVK8Xv3EVlr9APNwr8mE5+7gPNrpZrQgUlfaZjbGoy5sfhKn
 tMPmlc6rKkceKN9matJZLI7Mt9GH3IcEIZ4KGJ91AAxpV9UuWRm0WjmEmKGKlhIt
@@ -38,11 +29,14 @@ zW77AoGALXvpUYa/xDrYERiERH5cVE065ktt+exRPuE+u0XvLJ1l+2h7rnsFhZ51
 6x5P1U8QqIT01XAPfE1X02mcQj/FYJGnLFwf5GKUBcvSPhwxkT8=
 -----END RSA PRIVATE KEY-----`;
 
-mockNconf.set('AUTH_CERT_KEY', key);
+const mockConfig = {
+  get: (key) => key === 'AUTH_CERT_KEY' ? keyValue : undefined,
+};
+let keyValue = key;
 
 describe('crypto deciphering', function () {
   const crypto = proxyquire('../lib/crypto', {
-    nconf: mockNconf
+    './config': mockConfig
   });
 
   it('should work for v1 encryption', function () {

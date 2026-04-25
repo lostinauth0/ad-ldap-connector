@@ -22,6 +22,7 @@ describe('lib/ldap initialize()', function () {
   function buildLdapModule() {
     return proxyquire('../lib/ldap', {
       nconf: mockNconf,
+      './config': mockNconf,
       'cross-keychain': mockKeychain,
       './crypto': mockCrypto,
       fs: mockFs,
@@ -50,7 +51,6 @@ describe('lib/ldap initialize()', function () {
         delete this.values[key];
         nconfClearCalls.push(key);
       },
-      '@global': true,
     };
 
     mockKeychain = {

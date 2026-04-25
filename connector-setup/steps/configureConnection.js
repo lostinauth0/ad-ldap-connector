@@ -3,7 +3,7 @@ var urlJoin = require('url-join');
 var fs = require('fs');
 var path = require('path');
 var thumbprint = require('@auth0/thumbprint');
-var nconf = require('nconf');
+var config = require('../../lib/config');
 var os = require('os');
 
 var pemToCert = function (pem) {
@@ -19,8 +19,8 @@ var pemToCert = function (pem) {
 };
 
 var getCurrentThumbprint = function (workingPath) {
-  if (nconf.get('AUTH_CERT')) {
-    return thumbprint.calculate(pemToCert(nconf.get('AUTH_CERT')));
+  if (config.get('AUTH_CERT')) {
+    return thumbprint.calculate(pemToCert(config.get('AUTH_CERT')));
   }
 
   var cert = pemToCert(
@@ -31,12 +31,12 @@ var getCurrentThumbprint = function (workingPath) {
 
 module.exports = function (program, workingPath, connectionInfo, ticket, cb) {
   var serverUrl =
-    nconf.get('SERVER_URL') ||
-    'http://' + os.hostname() + ':' + (nconf.get('PORT') || 4000);
+    config.get('SERVER_URL') ||
+    'http://' + os.hostname() + ':' + (config.get('PORT') || 4000);
 
   var signInEndpoint = urlJoin(serverUrl, '/wsfed');
   var pem =
-    nconf.get('AUTH_CERT') ||
+    config.get('AUTH_CERT') ||
     fs.readFileSync(path.join(workingPath, 'certs', 'cert.pem')).toString();
   var cert = pemToCert(pem);
 
@@ -49,13 +49,13 @@ module.exports = function (program, workingPath, connectionInfo, ticket, cb) {
     .post(ticket, {
       certs: [cert],
       signInEndpoint: signInEndpoint,
-      agentMode: nconf.get('AGENT_MODE'),
+      agentMode: config.get('AGENT_MODE'),
       agentVersion: require('../../package').version,
     })
     .then((response) => {
-      nconf.set('SERVER_URL', serverUrl);
-      nconf.set('LAST_SENT_THUMBPRINT', getCurrentThumbprint(workingPath));
-      nconf.set('TENANT_SIGNING_KEY', response.data.signingKey || '');
+      config.set('SERVER_URL', serverUrl);
+      config.set('LAST_SENT_THUMBPRINT', getCurrentThumbprint(workingPath));
+      config.set('TENANT_SIGNING_KEY', response.data.signingKey || '');
 
       console.log(
         ('Connection ' + connectionInfo.connectionName + ' configured.').green

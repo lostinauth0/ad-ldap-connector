@@ -1,5 +1,5 @@
 var passport  = require('passport');
-var nconf     = require('nconf');
+var config    = require('./lib/config');
 var jwt       = require('jsonwebtoken');
 var logout    = require('express-passport-logout');
 
@@ -16,7 +16,7 @@ exports.install = function (app) {
 
     var token = req.headers.authorization.replace('Bearer ', '');
 
-    jwt.verify(token, nconf.get('TENANT_SIGNING_KEY'), function (err) {
+    jwt.verify(token, config.get('TENANT_SIGNING_KEY'), function (err) {
       if (err) {
         console.log('Validate Access Token Error', err);
         return res.send(401);
@@ -26,7 +26,7 @@ exports.install = function (app) {
     });
   };
 
-  if (nconf.get('LDAP_URL')) {
+  if (config.get('LDAP_URL')) {
     var users = new Users();
 
     app.get('/users', validateAccessToken, function (req, res) {
@@ -53,8 +53,8 @@ exports.install = function (app) {
     function (req, res, next) {
       if (req.session.messages) return next();
 
-      var strategies = nconf.get('LDAP_URL') ?
-                          (nconf.get('CLIENT_CERT_AUTH') ?
+      var strategies = config.get('LDAP_URL') ?
+                          (config.get('CLIENT_CERT_AUTH') ?
                             ['ClientCertAuthentication'] :
                             ['IISIntegrated', 'ApacheKerberos', 'WindowsAuthentication']) :
                           ['WindowsAuthentication'];
@@ -73,7 +73,7 @@ exports.install = function (app) {
       var is_integrated =  integrated_headers.some(function (h) {
         return !!req.headers[h];
       });
-      if (req.session.user && (req.query.wprompt !== 'consent' || is_integrated || nconf.get('CLIENT_CERT_AUTH'))) {
+      if (req.session.user && (req.query.wprompt !== 'consent' || is_integrated || config.get('CLIENT_CERT_AUTH'))) {
         req.user = req.session.user;
         return wsfederationResponses.token(req, res);
       }
@@ -82,7 +82,7 @@ exports.install = function (app) {
       var messages = (req.session.messages || []).join('<br />');
       delete req.session.messages;
       return res.render('login', {
-        title: nconf.get('SITE_NAME'),
+        title: config.get('SITE_NAME'),
         errors: messages
       });
     });

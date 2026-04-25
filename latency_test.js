@@ -2,10 +2,10 @@ var latency_test = module.exports;
 const axios = require('axios');
 const _ = require('lodash');
 const async = require('async');
-const nconf = require('nconf');
+const config = require('./lib/config');
 const url = require('url');
 const test_url =
-  'https://' + url.parse(nconf.get('PROVISIONING_TICKET')).host + '/test';
+  'https://' + url.parse(config.get('PROVISIONING_TICKET')).host + '/test';
 const exit = require('./lib/exit');
 
 /**

@@ -1,5 +1,5 @@
 require('colors');
-require('./lib/initConf');
+const config = require('./lib/config');
 require('./lib/setupProxy');
 
 const axios = require('axios');
@@ -9,7 +9,6 @@ const url = require('url');
 const path = require('path');
 const ldap = require('./lib/ldap');
 const async = require('async');
-const nconf = require('nconf');
 const winston = require('winston');
 const thumbprint = require('@auth0/thumbprint');
 const WebSocket = require('ws');
@@ -76,10 +75,10 @@ async.series(
       logger.trying('Testing connectivity to Auth0...');
 
       var connectivity_url = 'https://login.auth0.com/test';
-      if (nconf.get('PROVISIONING_TICKET')) {
+      if (config.get('PROVISIONING_TICKET')) {
         connectivity_url =
           'https://' +
-          url.parse(nconf.get('PROVISIONING_TICKET')).host +
+          url.parse(config.get('PROVISIONING_TICKET')).host +
           '/test';
       }
 
@@ -107,7 +106,7 @@ async.series(
     function (callback) {
       logger.trying('Testing hub connectivity (WS).');
 
-      var hubUrl = nconf.get('AD_HUB');
+      var hubUrl = config.get('AD_HUB');
       if (!hubUrl) {
         hubUrl = 'https://login.auth0.com/lo/hub';
         logger.warn('Could not load AD_HUB from config. Setting to default.');
@@ -136,10 +135,10 @@ async.series(
       logger.trying('Testing clock skew...');
 
       var clock_url = 'https://login.auth0.com/test';
-      if (nconf.get('PROVISIONING_TICKET')) {
+      if (config.get('PROVISIONING_TICKET')) {
         clock_url =
           'https://' +
-          url.parse(nconf.get('PROVISIONING_TICKET')).host +
+          url.parse(config.get('PROVISIONING_TICKET')).host +
           '/test';
       }
 
@@ -216,7 +215,7 @@ async.series(
           logger.info('  > Local thumbprint: ' + local_thumbprint);
         }
 
-        if (!nconf.get('PROVISIONING_TICKET')) {
+        if (!config.get('PROVISIONING_TICKET')) {
           logger.warn(
             '  > ' +
               'PROVISIONING_TICKET'.yellow +
@@ -225,7 +224,7 @@ async.series(
           return callback();
         }
 
-        var info_url = nconf.get('PROVISIONING_TICKET') + '/info';
+        var info_url = config.get('PROVISIONING_TICKET') + '/info';
         axios
           .get(info_url)
           .then((response) => {
@@ -319,14 +318,14 @@ async.series(
     function (callback) {
       logger.trying('Testing SSL connectivity to LDAP.');
 
-      if (!nconf.get('LDAP_URL')) {
+      if (!config.get('LDAP_URL')) {
         logger.warn(
           '  > ' + 'LDAP_URL'.yellow + ' not set. Cannot test SSL connectivity.'
         );
         return callback();
       }
 
-      const { host, protocol, port } = url.parse(nconf.get('LDAP_URL'));
+      const { host, protocol, port } = url.parse(config.get('LDAP_URL'));
       if (protocol !== 'ldaps:') {
         return callback();
       }
@@ -352,23 +351,23 @@ async.series(
     },
     function (callback) {
       logger.trying('Testing LDAP connectivity.');
-      if (!nconf.get('LDAP_BASE')) {
+      if (!config.get('LDAP_BASE')) {
         logger.warn(
           '  > ' + 'LDAP_BASE'.yellow + ' not set. Cannot test connectivity.'
         );
         return callback();
       }
 
-      logger.info('  > LDAP BASE: %s', nconf.get('LDAP_BASE'));
+      logger.info('  > LDAP BASE: %s', config.get('LDAP_BASE'));
 
       var opts = {
         scope: 'sub',
         sizeLimit: 5,
-        filter: nconf.get('LDAP_SEARCH_ALL_QUERY'),
+        filter: config.get('LDAP_SEARCH_ALL_QUERY'),
       };
 
       try {
-        ldap.client.search(nconf.get('LDAP_BASE'), opts, function (err, res) {
+        ldap.client.search(config.get('LDAP_BASE'), opts, function (err, res) {
           if (err) {
             logger.failed('Connection to LDAP %s.', 'failed'.red);
             if (err && err.message)
