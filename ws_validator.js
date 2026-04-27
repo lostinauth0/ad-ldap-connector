@@ -1,19 +1,15 @@
 var WebSocket = require('ws');
 var EventEmitter = require('events').EventEmitter;
-var exit = require('./lib/exit');
-var jwt = require('jsonwebtoken');
-var config = require('./lib/config');
-var fs = require('fs');
-var Users = require('./lib/users');
-var users = new Users();
 var async = require('async');
 var cb = require('cb');
 var ms = require('ms');
 
-var cert = {
-  key: config.get('AUTH_CERT_KEY') || fs.readFileSync(__dirname + '/certs/cert.key'),
-  cert: config.get('AUTH_CERT') || fs.readFileSync(__dirname + '/certs/cert.pem')
-};
+var exit = require('./lib/exit');
+var jwt = require('jsonwebtoken');
+var config = require('./lib/config');
+const secureStorage = require('./lib/secureStorage');
+var Users = require('./lib/users');
+var users = new Users();
 
 var authenticate_when_password_expired = config.get('ALLOW_PASSWORD_EXPIRED');
 var authenticate_when_password_change_required = config.get('ALLOW_PASSWORD_CHANGE_REQUIRED');
@@ -40,10 +36,11 @@ const reconnectionInterval = config.get('WS_RECONNECT_INTERVAL_MS') || 10000;
 // used by timer, determine if socket has to be rebuilt or not
 let openedSocket = false;
 
-function setupWebsocket() {
+async function setupWebsocket() {
+  const authCertKey = await secureStorage.get(secureStorage.keys.AUTH_CERT_KEY);
   ws = new WebSocket(socket_server_address);
 
-  return new Promise((resolve, reject) => {   
+  return new Promise((resolve, reject) => {
     ws.sendEvent = function (name, payload) {
       this.send(JSON.stringify({
         n: name,
@@ -347,7 +344,7 @@ function setupWebsocket() {
     }
 
     function authenticate_connector() {
-      var token = jwt.sign({}, cert.key, {
+      var token = jwt.sign({}, authCertKey, {
         algorithm: 'RS256',
         expiresIn: '1m',
         issuer: config.get('CONNECTION'),
@@ -358,7 +355,7 @@ function setupWebsocket() {
         jwt: token
       });
     };
-  })
+  });
 }
 
 async function reconnect() {

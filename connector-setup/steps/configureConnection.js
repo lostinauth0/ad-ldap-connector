@@ -1,12 +1,14 @@
 const axios = require('axios');
-var urlJoin = require('url-join');
-var fs = require('fs');
-var path = require('path');
-var thumbprint = require('@auth0/thumbprint');
-var config = require('../../lib/config');
-var os = require('os');
+const urlJoin = require('url-join');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
-var pemToCert = function (pem) {
+const thumbprint = require('@auth0/thumbprint');
+const config = require('../../lib/config');
+const secureStorage = require('../../lib/secureStorage');
+
+function pemToCert (pem) {
   var cert =
     /-----BEGIN CERTIFICATE-----([^-]*)-----END CERTIFICATE-----/g.exec(
       pem.toString()
@@ -14,70 +16,41 @@ var pemToCert = function (pem) {
   if (cert.length > 0) {
     return cert[1].replace(/[\n|\r\n]/g, '');
   }
-
   return null;
 };
 
-var getCurrentThumbprint = function (workingPath) {
-  if (config.get('AUTH_CERT')) {
-    return thumbprint.calculate(pemToCert(config.get('AUTH_CERT')));
-  }
+async function configureConnection({ provisioningTicket, connectionName }) {
+  const serverUrl = config.get('SERVER_URL') || 'http://' + os.hostname() + ':' + (config.get('PORT') || 4000);
+  const signInEndpoint = urlJoin(serverUrl, '/wsfed');
+  const pem = await secureStorage.get(secureStorage.keys.AUTH_CERT);
+  const cert = pemToCert(pem);
+  const certThumbprint = thumbprint.calculate(cert);
 
-  var cert = pemToCert(
-    fs.readFileSync(path.join(workingPath, 'certs', 'cert.pem')).toString()
-  );
-  return thumbprint.calculate(cert);
-};
-
-module.exports = function (program, workingPath, connectionInfo, ticket, cb) {
-  var serverUrl =
-    config.get('SERVER_URL') ||
-    'http://' + os.hostname() + ':' + (config.get('PORT') || 4000);
-
-  var signInEndpoint = urlJoin(serverUrl, '/wsfed');
-  var pem =
-    config.get('AUTH_CERT') ||
-    fs.readFileSync(path.join(workingPath, 'certs', 'cert.pem')).toString();
-  var cert = pemToCert(pem);
-
-  console.log(
-    ('Configuring connection ' + connectionInfo.connectionName + '.').yellow
-  );
+  console.log(('Configuring connection ' + connectionName + '.').yellow);
   console.log(' > Posting certificates and signInEndpoint: ' + signInEndpoint);
 
-  axios
-    .post(ticket, {
+  try {
+    const response = await axios.post(provisioningTicket, {
       certs: [cert],
       signInEndpoint: signInEndpoint,
       agentMode: config.get('AGENT_MODE'),
       agentVersion: require('../../package').version,
-    })
-    .then((response) => {
-      config.set('SERVER_URL', serverUrl);
-      config.set('LAST_SENT_THUMBPRINT', getCurrentThumbprint(workingPath));
-      config.set('TENANT_SIGNING_KEY', response.data.signingKey || '');
-
-      console.log(
-        ('Connection ' + connectionInfo.connectionName + ' configured.').green
-      );
-      cb();
-    })
-    .catch((err) => {
-      if (err.response && err.response.status !== 200) {
-        console.log(
-          'Unexpected status while configuring connection: ' + err.response.status
-        );
-        return cb(new Error(err.response.data));
-      }
-
-      if (err.code === 'ECONNREFUSED') {
-        console.log('Unable to reach Auth0 at ' + ticket);
-      } else {
-        console.log(
-          'Unexpected error while configuring connection: ' +
-            (err.code || err.message)
-        );
-      }
-      return cb(err);
     });
-};
+    config.set('SERVER_URL', serverUrl);
+    config.set('LAST_SENT_THUMBPRINT', certThumbprint);
+    config.set('TENANT_SIGNING_KEY', response.data.signingKey || '');
+    console.log(('Connection ' + connectionName + ' configured.').green);
+  } catch (err) {
+    if (err.response && err.response.status !== 200) {
+      throw new Error('Unexpected status while configuring connection: ' + err.response.status);
+    }
+
+    if (err.code === 'ECONNREFUSED') {
+      throw new Error('Unable to reach Auth0 at ' + provisioningTicket);
+    }
+
+    throw new Error('Unexpected error while configuring connection: ' + (err.code || err.message));
+  }
+}
+
+module.exports = { configureConnection };

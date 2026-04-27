@@ -23,7 +23,6 @@ process.on('uncaughtException', function(err) {
 
 
 var ws_client;
-
 var connectorSetup = require('./connector-setup');
 
 let maxHeaderSize = Number(config.get('MAX_HEADER_SIZE'));
@@ -35,8 +34,11 @@ console.log('');
 console.log('======================== STARTING AD-LDAP CONNECTOR ========================');
 console.log('Maximum header size = ' + maxHeaderSize);
 
-connectorSetup.run(__dirname, async function(err) {
-  if(err) {
+(async () => {
+  try {
+    await config.initialize();
+    await connectorSetup.run();
+  } catch (err) {
     console.log(err.message);
     return exit(2);
   }
@@ -145,4 +147,4 @@ connectorSetup.run(__dirname, async function(err) {
   }
 
   console.log('listening on port: ' + config.get('PORT'));
-});
+})();

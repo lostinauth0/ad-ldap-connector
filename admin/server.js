@@ -806,5 +806,6 @@ module.exports = app;
   await ldap.initialize();
   await config.save();
   await consumePendingAdminPassword();
+  await cas.injectAsync();
   await runServer();
 })();
