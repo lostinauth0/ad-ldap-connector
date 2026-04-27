@@ -115,6 +115,11 @@ exports.run = async function() {
   config.set('SITE_NAME', config.get('SITE_NAME') || ticketInfo.connectionName);
   config.set(ticketInfo.realm.name, ticketInfo.realm.postTokenUrl);
 
+  // Save config to file
+  if (overrideConfig) {
+    await config.save();
+  }
+
   // Generate self-signed certificates if needed
   await certificates.initialize({
     connectionDomain: ticketInfo.connectionDomain,
