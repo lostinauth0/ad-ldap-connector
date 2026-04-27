@@ -17,8 +17,6 @@ const adLdapSettings = require('./steps/adLdapSettings');
 
 exports.run = async function() {
 
-  const overrideConfig = config.get('OVERRIDE_CONFIG') !== 'false';
-
   // Inject CA certificates
   await cas.injectAsync();
 
@@ -116,9 +114,7 @@ exports.run = async function() {
   config.set(ticketInfo.realm.name, ticketInfo.realm.postTokenUrl);
 
   // Save config to file
-  if (overrideConfig) {
-    await config.save();
-  }
+  await config.save();
 
   // Generate self-signed certificates if needed
   await certificates.initialize({
@@ -133,8 +129,6 @@ exports.run = async function() {
   });
 
   // Save config to file
-  if (overrideConfig) {
-    await config.save();
-  }
+  await config.save();
   console.log('Connector setup complete.');
 };
