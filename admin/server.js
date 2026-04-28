@@ -29,6 +29,8 @@ const passwordStrength = require('./passwordStrength');
 const ldap = require('../lib/ldap');
 const secureStorage = require('../lib/secureStorage');
 const certificates = require('../lib/certificates');
+const { loadProvisioningTicket } = require('../lib/provisioningTicket');
+const adLdapSettings = require('../lib/adLdapSettings');
 
 const BCRYPT_SALT_ROUNDS = 12;
 const SERVER_PORT = 8357;
@@ -39,18 +41,8 @@ const {requireAdminPasswordSet, requireAuth, getHashedAdminPassword} = require('
 const csrfProtection = csrf({cookie: true});
 var detected_settings = {};
 
-function read_current_config() {
-  var current_config = {};
-  try {
-    var content = fs.readFileSync(__dirname + '/../config.json', 'utf8');
-    current_config = JSON.parse(content);
-  } catch (err) {
-  }
-  return current_config;
-}
-
 function set_current_config(req, res, next) {
-  req.current_config = read_current_config();
+  req.current_config = config.getAll();
   next();
 }
 
@@ -74,12 +66,12 @@ function restart_server(cb) {
   cb();
 }
 
-function merge_config(req, res) {
-  var new_config = xtend(req.current_config, req.body);
-  fs.writeFileSync(
-    __dirname + '/../config.json',
-    JSON.stringify(new_config, null, 2)
-  );
+async function merge_config(req, res) {
+  var newConfig = xtend(req.current_config, req.body);
+  for(const key of Object.keys(newConfig)) {
+    config.set(key, newConfig[key]);
+  }
+  await config.save();
 
   if (req.body.LDAP_URL || req.body.PORT || req.body.SERVER_URL) {
     return restart_server(function () {
@@ -196,7 +188,7 @@ async function registerRoutes(app) {
         req.current_config,
         {
           SUCCESS: req.query && req.query.s === '1',
-          ERRORS: req.query && req.query.error ? [req.query.error] : null,
+          ERROR: req.query.error,
           LDAP_RESULTS: req.session.LDAP_RESULTS,
         },
         {
@@ -288,111 +280,26 @@ async function registerRoutes(app) {
     '/ticket',
     set_current_config,
     csrfProtection,
-    function (req, res, next) {
+    async function (req, res, next) {
       if (!req.body.PROVISIONING_TICKET) {
-        return res.render(
-          'index',
-          xtend(req.current_config, {
-            ERROR:
-              'The ticket url ' + req.body.PROVISIONING_TICKET + ' is not vaild.',
-          })
-        );
+        return res.redirect('/?error=' + encodeURIComponent('Provisioning ticket URL is required.'));
       }
 
-      var info_url = urlJoin(req.body.PROVISIONING_TICKET, '/info');
+      const provisioningTicket = req.body.PROVISIONING_TICKET;
+      try {
+        const ticketInfo = await loadProvisioningTicket(provisioningTicket);
+        req.body.AD_HUB = ticketInfo.adHub;
 
-      axios
-        .get(info_url)
-        .then((response) => {
-          const body = response.data;
-          if (!body || !body.adHub) {
-            return res.render(
-              'index',
-              xtend(req.current_config, {
-                ERROR: 'Wrong ticket url.',
-              })
-            );
-          }
+        if (!detected_settings.LDAP_URL) {
+          const discoveredSettings = await adLdapSettings.discoverSettings(ticketInfo.connectionDomain);
+          console.dir(discoveredSettings);
+          detected_settings = discoveredSettings;
+        }
+        next();
 
-          req.body.AD_HUB = body.adHub;
-
-          if (!detected_settings.LDAP_URL) {
-            var adLdapSettings = require('../connector-setup/steps/ad-ldap-settings.js');
-            adLdapSettings.discoverSettings(
-              body.connectionDomain,
-              function (config) {
-                console.dir(config);
-                detected_settings = config;
-                next();
-              }
-            );
-          } else {
-            next();
-          }
-        })
-        .catch((err) => {
-          console.error(err);
-
-          if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ENOTFOUND') {
-            console.error('Unable to reach auth0 at: ' + info_url);
-            return res.render(
-              'index',
-              xtend(req.current_config, {
-                ERROR:
-                  'Unable to connect to Auth0, verify internet connectivity.',
-              })
-            );
-          }
-
-          if (
-            err.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
-            err.code === 'CERT_UNTRUSTED'
-          ) {
-            console.error(
-              'The Auth0 certificate at ' + info_url + ' could not be validated',
-              err
-            );
-            return res.render(
-              'index',
-              xtend(req.current_config, {
-                ERROR:
-                  'The Auth0 server is using a certificate issued by an untrusted Certification Authority. Go to https://auth0.com/docs/connector/ca-certificates for instructions on how to install your certificate Authority. \n ' +
-                  err.message,
-              })
-            );
-          }
-
-          if (err.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
-            console.error(
-              'The Auth0 certificate at ' + info_url + ' could not be validated',
-              err
-            );
-            return res.render(
-              'index',
-              xtend(req.current_config, {
-                ERROR:
-                  'The Auth0 server is using a self-signed certificate. Go to https://auth0.com/docs/connector/ca-certificates for instructions on how to install your certificate. \n' +
-                  err.message,
-              })
-            );
-          }
-
-          if (!err.response || err.response.status !== 200) {
-            return res.render(
-              'index',
-              xtend(req.current_config, {
-                ERROR: 'Wrong ticket url.',
-              })
-            );
-          }
-
-          return res.render(
-            'index',
-            xtend(req.current_config, {
-              ERROR: 'Network error: ' + err.message,
-            })
-          );
-        });
+      } catch (err) {
+        return res.redirect(`/?error=${encodeURIComponent(err.message)}`);
+      }
     },
     merge_config
   );

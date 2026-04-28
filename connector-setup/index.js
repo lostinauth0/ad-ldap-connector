@@ -11,9 +11,9 @@ const secureStorage = require('../lib/secureStorage');
 
 const { input, password } = require('@inquirer/prompts');
 
-const { loadProvisioningTicket } = require('./steps/provisioningTicket');
+const { loadProvisioningTicket } = require('../lib/provisioningTicket');
 const { configureConnection } = require('./steps/configureConnection');
-const adLdapSettings = require('./steps/adLdapSettings');
+const adLdapSettings = require('../lib/adLdapSettings');
 
 exports.run = async function() {
 
