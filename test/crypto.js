@@ -29,38 +29,42 @@ zW77AoGALXvpUYa/xDrYERiERH5cVE065ktt+exRPuE+u0XvLJ1l+2h7rnsFhZ51
 6x5P1U8QqIT01XAPfE1X02mcQj/FYJGnLFwf5GKUBcvSPhwxkT8=
 -----END RSA PRIVATE KEY-----`;
 
-const mockConfig = {
-  get: (key) => key === 'AUTH_CERT_KEY' ? keyValue : undefined,
-};
 let keyValue = key;
+
+const mockSecureStorage = {
+  get: async (k) => k === 'auth-cert-key' ? keyValue : undefined,
+  keys: {
+    AUTH_CERT_KEY: 'auth-cert-key',
+  },
+};
 
 describe('crypto deciphering', function () {
   const crypto = proxyquire('../lib/crypto', {
-    './config': mockConfig
+    './secureStorage': mockSecureStorage,
   });
 
-  it('should work for v1 encryption', function () {
+  it('should work for v1 encryption', async function () {
     const cipher = 'cfcb8eac5d97b067dfc6544b2affbd94daf8723456d1c24b8fe8cb6f2a88e8aa'
     const expected = 'GoodNewsEveryone';
     assert.equal(
-      crypto.decrypt(cipher),
+      await crypto.decrypt(cipher),
       expected
     );
   });
 
-  it('should work for v2 encryption', function () {
+  it('should work for v2 encryption', async function () {
     const cipher = '$2$.f3e9ef58a357b263c49f84aef2aea010.7ae2d5324ec8d976405e076e276f6d04.eb2507a72af23e22eab57c406e55fc43b3527ea505914eda4d541025390fab28';
     const expected = 'GoodNewsEveryone';
     assert.equal(
-      crypto.decrypt(cipher),
+      await crypto.decrypt(cipher),
       expected
     );
   });
 
-  it('encryption/decryption should work for v2 encryption', function () {
+  it('encryption/decryption should work for v2 encryption', async function () {
     const expected = 'GoodNewsEveryone';
     assert.equal(
-      crypto.decrypt(crypto.encrypt(expected)),
+      await crypto.decrypt(await crypto.encrypt(expected)),
       expected
     );
   });

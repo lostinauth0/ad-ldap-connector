@@ -1,27 +1,26 @@
-var passport  = require('passport');
-var config    = require('./lib/config');
-var jwt       = require('jsonwebtoken');
-var logout    = require('express-passport-logout');
+const passport = require('passport');
+const config = require('./lib/config');
+const jwt = require('jsonwebtoken');
+const logout = require('express-passport-logout');
 
-var wsfederationResponses = require('./lib/wsfederation-responses');
-var Users                 = require('./lib/users');
+const wsfederationResponses = require('./lib/wsfederation-responses');
+const Users = require('./lib/users');
 
-var integrated_headers = ['x-forwarded-user', 'x-iisnode-logon_user'];
-var kerberos_middleware;
+const integrated_headers = ['x-forwarded-user', 'x-iisnode-logon_user'];
 
-exports.install = function (app) {
+exports.install = async function (app) {
 
   var validateAccessToken = function (req, res, next) {
-    if (!req.headers.authorization) return res.send(403);
+    if (!req.headers.authorization) {
+      return res.send(403);
+    }
 
     var token = req.headers.authorization.replace('Bearer ', '');
-
     jwt.verify(token, config.get('TENANT_SIGNING_KEY'), function (err) {
       if (err) {
         console.log('Validate Access Token Error', err);
         return res.send(401);
       }
-
       next();
     });
   };
@@ -53,15 +52,20 @@ exports.install = function (app) {
     function (req, res, next) {
       if (req.session.messages) return next();
 
-      var strategies = config.get('LDAP_URL') ?
-                          (config.get('CLIENT_CERT_AUTH') ?
-                            ['ClientCertAuthentication'] :
-                            ['IISIntegrated', 'ApacheKerberos', 'WindowsAuthentication']) :
-                          ['WindowsAuthentication'];
+      let strategies;
+      if (config.get('LDAP_URL')) {
+        if (config.get('CLIENT_CERT_AUTH')) {
+          strategies = ['ClientCertAuthentication'];
+        } else {
+          strategies = ['IISIntegrated', 'ApacheKerberos', 'WindowsAuthentication'];
+        }
+      } else {
+        strategies = ['WindowsAuthentication'];
+      }
 
       passport.authenticate(strategies, {
         failureRedirect: req.url,
-        failureMessage: "The username or password you entered is incorrect.",
+        failureMessage: 'The username or password you entered is incorrect.',
         session: false
       }, function (err, profile) {
         if (err) return next(err);
@@ -88,35 +92,35 @@ exports.install = function (app) {
     });
 
   app.post('/wsfed', function (req, res, next) {
-      passport.authenticate('WindowsAuthentication', {
-        failureRedirect: req.url,
-        failureMessage: "The username or password you entered is incorrect.",
-        session: false
-      })(req, res, next);
-    }, function (req, res, next) {
-      console.log('user ' + (req.user.displayName || 'unknown').green + ' authenticated');
-      req.session.user = req.user;
-      next();
-    }, wsfederationResponses.token);
+    passport.authenticate('WindowsAuthentication', {
+      failureRedirect: req.url,
+      failureMessage: 'The username or password you entered is incorrect.',
+      session: false
+    })(req, res, next);
+  }, function (req, res, next) {
+    console.log('user ' + (req.user.displayName || 'unknown').green + ' authenticated');
+    req.session.user = req.user;
+    next();
+  }, wsfederationResponses.token);
 
   app.post('/wsfed/direct', function (req, res, next) {
-      passport.authenticate('WindowsAuthentication', {
-        session: false
-      }, function (err, profile, info) {
-        if (err) return next(err);
+    passport.authenticate('WindowsAuthentication', {
+      session: false
+    }, function (err, profile, info) {
+      if (err) return next(err);
 
-        if (!profile) {
-          return res.json(401, { invalid_user_password: info && info.message ? info.message : 'Wrong email or password.' });
-        }
+      if (!profile) {
+        return res.json(401, { invalid_user_password: info && info.message ? info.message : 'Wrong email or password.' });
+      }
 
-        req.user = profile;
-        next();
-      })(req, res, next);
-    }, function (req, res, next) {
-      console.log('user ' + (req.user.displayName || 'unknown').green + ' authenticated');
-      req.session.user = req.user;
+      req.user = profile;
       next();
-    }, wsfederationResponses.tokenDirect);
+    })(req, res, next);
+  }, function (req, res, next) {
+    console.log('user ' + (req.user.displayName || 'unknown').green + ' authenticated');
+    req.session.user = req.user;
+    next();
+  }, wsfederationResponses.tokenDirect);
 
   app.get('/logout', function (req, res, next) {
     if (req.session.user) {

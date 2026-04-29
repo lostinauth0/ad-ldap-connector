@@ -13,20 +13,26 @@ const bcrypt = require('bcryptjs');
 const TEST_PASSWORD = 'TestPassword123456!';
 
 // ---------------------------------------------------------------------------
-// In-memory keychain — realistic stand-in for the OS credential store
+// In-memory secure storage — realistic stand-in for the OS credential store
 // ---------------------------------------------------------------------------
 const keychainStore = new Map();
 
-const keychainMock = {
-  getPassword: async (service, account) =>
-    keychainStore.get(`${service}/${account}`) || null,
-  setPassword: async (service, account, value) =>
-    keychainStore.set(`${service}/${account}`, value),
+const mockSecureStorage = {
+  store: async (key, value) => keychainStore.set(key, value),
+  get: async (key) => keychainStore.get(key) || null,
+  clear: async (key) => keychainStore.delete(key),
+  keys: {
+    AUTH_CERT: 'auth-cert',
+    AUTH_CERT_KEY: 'auth-cert-key',
+    LDAP_BIND_PASSWORD: 'ldap-bind-password',
+    ADMIN_CONSOLE_PASSWORD: 'admin-console-password',
+  },
+  '@global': true,
 };
 
 function setAdminPassword(password) {
   const hash = bcrypt.hashSync(password, 1); // cost=1 for test speed
-  keychainStore.set('auth0-ad-ldap-connector/admin-password', hash);
+  keychainStore.set('admin-console-password', hash);
 }
 
 // ---------------------------------------------------------------------------
@@ -35,7 +41,7 @@ function setAdminPassword(password) {
 function buildApp() {
   return proxyquire('../../admin/server', {
     // Prevent the HTTP server from binding a port during tests
-    '../lib/add_certs': { inject: () => {} },
+    '../lib/add_certs': { inject: () => {}, injectAsync: () => Promise.resolve() },
     // No real LDAP server available in test environment
     '../lib/ldap': {
       initialize: () => Promise.resolve(),
@@ -47,8 +53,9 @@ function buildApp() {
       this.getByUserName = (q, opts, cb) =>
         cb(null, { dn: 'cn=test,dc=example,dc=com' });
     },
-    // Replace the OS keychain with an in-memory store
-    'cross-keychain': keychainMock,
+    // Replace the OS secure storage with an in-memory store
+    // @global ensures the stub is used by admin/middleware.js too
+    '../lib/secureStorage': mockSecureStorage,
     // Everything else (csurf, express-session, bcrypt, EJS …) is real
   });
 }

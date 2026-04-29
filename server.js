@@ -1,9 +1,17 @@
-var config = require('./lib/config');
 require('colors');
+const crypto = require('crypto');
+const process = require('node:process');
+const express  = require('express');
+const bodyParser = require('body-parser');
+const logger = require('morgan');
+const passport = require('passport');
+
 require('./eventlog');
 require('./lib/add_certs');
 require('./lib/setupProxy');
 const exit = require('./lib/exit');
+const config = require('./lib/config');
+const endpoints = require('./endpoints');
 
 function end () {
   console.log('Got SIGTERM, exiting now.');
@@ -23,7 +31,8 @@ process.on('uncaughtException', function(err) {
 
 
 var ws_client;
-var connectorSetup = require('./connector-setup');
+const connectorSetup = require('./connector-setup');
+const session = require('express-session');
 
 let maxHeaderSize = Number(config.get('MAX_HEADER_SIZE'));
 maxHeaderSize = maxHeaderSize > 0 ? maxHeaderSize : 16834;
@@ -69,15 +78,8 @@ console.log('Maximum header size = ' + maxHeaderSize);
     return;
   }
 
-  var express  = require('express');
-  var bodyParser = require('body-parser');
-  var cookieParser = require('cookie-parser');
-  var logger = require('morgan');
-  var passport = require('passport');
-
   require('./lib/setupPassport');
 
-  var cookieSessions = require('cookie-sessions');
   var app = express();
 
   // configure the webserver
@@ -92,16 +94,17 @@ console.log('Maximum header size = ' + maxHeaderSize);
       next();
     });
   }
-  app.use(cookieParser());
   app.use(bodyParser.json());
   app.use(bodyParser.urlencoded({extended:true}));
-  app.use(cookieSessions({
-    name:    'auth0-ad-conn',
-    secret:   config.get('SESSION_SECRET')}));
+  app.use(session({
+    secret: crypto.randomBytes(64).toString('hex'),
+    saveUninitialized: false,
+    resave: false,
+  }));
 
   app.use(passport.initialize());
 
-  require('./endpoints').install(app);
+  await endpoints.install(app);
 
   var options = {
     port: config.get('PORT'),

@@ -88,6 +88,10 @@ server.search(BASE_DN, function (req, res, next) {
   return next();
 });
 
-server.listen(LDAP_SERVER_PORT, () => {
-  console.log(`LDAP server running on ${LDAP_SERVER_PORT}`);
-});
+if (require.main === module) {
+  server.listen(LDAP_SERVER_PORT, () => {
+    console.log(`LDAP server running on ${LDAP_SERVER_PORT}`);
+  });
+}
+
+module.exports = server;

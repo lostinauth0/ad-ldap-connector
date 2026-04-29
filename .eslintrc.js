@@ -17,7 +17,7 @@ module.exports = {
     },
   ],
   parserOptions: {
-    ecmaVersion: 'latest',
+    ecmaVersion: 2022,
   },
   rules: {
     indent: ['error', 2],

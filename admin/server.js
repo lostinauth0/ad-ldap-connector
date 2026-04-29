@@ -1,7 +1,6 @@
 const config = require('../lib/config');
 require('../lib/setupProxy');
 
-const axios = require('axios');
 const multer = require('multer');
 const {Readable} = require('stream');
 const memoryStorage = multer.memoryStorage();
@@ -10,21 +9,21 @@ const unzipper = require('unzipper');
 const path = require('path');
 const archiver = require('archiver');
 const cas = require('../lib/add_certs');
+const cookieParser = require('cookie-parser');
 const csrf = require('csurf');
 const os = require('os');
 const fs = require('fs');
 const http = require('http');
 const express = require('express');
 const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const xtend = require('xtend');
-const urlJoin = require('url-join');
 const exec = require('child_process').exec;
 const app = express();
 const freeport = require('freeport');
 const test_config = require('./test_config');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const passwordStrength = require('./passwordStrength');
 const ldap = require('../lib/ldap');
 const secureStorage = require('../lib/secureStorage');
@@ -131,11 +130,11 @@ async function registerRoutes(app) {
   app.set('views', __dirname + '/views');
   app.set('view engine', 'ejs');
   app.use(express.static(__dirname + '/public'));
-  app.use(bodyParser.urlencoded({extended: true}));
   app.use(cookieParser());
+  app.use(bodyParser.urlencoded({extended: true}));
   app.use(
     session({
-      secret: 'sojo sut ed oterces le',
+      secret: crypto.randomBytes(64).toString('hex'),
       saveUninitialized: false,
       resave: false,
     })

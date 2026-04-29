@@ -33,7 +33,6 @@ $itemsToCopy = @(
     'node_modules',
     'public',
     'views',
-    '.jshintrc',
     '.eslintrc',
     '.nvmrc',
     '.npmrc',

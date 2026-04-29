@@ -1,27 +1,31 @@
-const config = require("../lib/config");
-var expect = require("chai").expect;
-var Users = require("../lib/users");
-var mockLdapServer = require("./resources/mock_ldap_server");
+const config = require('../lib/config');
+const expect = require('chai').expect;
+const Users = require('../lib/users');
+const mockLdapServer = require('../mock-ldap-server');
 
 // These unit tests use a mocked in-memory ldap server implementation running on localhost.
-// The mock server is implemented in ./resources/mock_ldap_server.js
+// The mock server is implemented in ../mock_ldap_server.js
 // The test data is defined in ./resources/mock_ldap_data.json
 const PORT = 1389;
 
-config.set("LDAP_URL", `ldap://0.0.0.0:${PORT}`);
-config.set("LDAP_BASE", "dc=example,dc=org");
-config.set("LDAP_BIND_USER", "cn=admin,dc=example,dc=org");
-config.set("LDAP_BIND_PASSWORD", "admin");
-config.set("LDAP_USER_BY_NAME", "(&(objectClass=inetOrgPerson)(uid={0}))");
-config.set(
-  "LDAP_SEARCH_QUERY",
-  "(&(objectClass=inetOrgPerson)(|(cn={0})(givenName={0})(sn={0})(uid={0})))"
-);
-config.set("LDAP_SEARCH_ALL_QUERY", "(objectClass=inetOrgPerson)");
-config.set("LDAP_SEARCH_GROUPS", "(member={0})");
-
-describe("users", function () {
+describe('users', function () {
   var server;
+
+  before(async function () {
+    process.env.OVERRIDE_CONFIG = 'false';
+    await config.initialize();
+    config.set('LDAP_URL', `ldap://0.0.0.0:${PORT}`);
+    config.set('LDAP_BASE', 'dc=example,dc=org');
+    config.set('LDAP_BIND_USER', 'cn=admin,dc=example,dc=org');
+    config.set('LDAP_BIND_PASSWORD', 'admin');
+    config.set('LDAP_USER_BY_NAME', '(&(objectClass=inetOrgPerson)(uid={0}))');
+    config.set(
+      'LDAP_SEARCH_QUERY',
+      '(&(objectClass=inetOrgPerson)(|(cn={0})(givenName={0})(sn={0})(uid={0})))'
+    );
+    config.set('LDAP_SEARCH_ALL_QUERY', '(objectClass=inetOrgPerson)');
+    config.set('LDAP_SEARCH_GROUPS', '(member={0})');
+  });
 
   beforeEach(function (done) {
     server = mockLdapServer.listen(PORT, function () {
@@ -33,23 +37,23 @@ describe("users", function () {
     server.close();
   });
 
-  describe("getByUserName", function () {
-    describe("when username is valid", function () {
-      it("should return user if user exists", function (done) {
+  describe('getByUserName', function () {
+    describe('when username is valid', function () {
+      it('should return user if user exists', function (done) {
         const users = new Users();
 
-        users.getByUserName("jdoe", {}, function (err, user) {
+        users.getByUserName('jdoe', {}, function (err, user) {
           expect(err).to.be.null;
-          expect(user.cn).to.equal("jdoe");
-          expect(user.mail).to.equal("jdoe@example.org");
+          expect(user.cn).to.equal('jdoe');
+          expect(user.mail).to.equal('jdoe@example.org');
           done();
         });
       });
 
-      it("should return null if user does not exist", function (done) {
+      it('should return null if user does not exist', function (done) {
         const users = new Users();
 
-        users.getByUserName("cdoe", {}, function (err, user) {
+        users.getByUserName('cdoe', {}, function (err, user) {
           expect(err).to.be.null;
           expect(user).to.be.undefined;
           done();
@@ -57,12 +61,12 @@ describe("users", function () {
       });
     });
 
-    describe("when username is not valid", function () {
-      it("should return null", function (done) {
+    describe('when username is not valid', function () {
+      it('should return null', function (done) {
         const users = new Users();
 
         users.getByUserName(
-          "jsm\\t)*(",
+          'jsm\\t)*(',
           { escaped: true },
           function (err, user) {
             expect(err).to.be.null;
@@ -74,67 +78,67 @@ describe("users", function () {
     });
   });
 
-  describe("validate", function () {
-    describe("when username and password are valid", function () {
-      it("should return user profile", function (done) {
+  describe('validate', function () {
+    describe('when username and password are valid', function () {
+      it('should return user profile', function (done) {
         const users = new Users();
 
-        users.validate("jdoe", "123", {}, function (err, profile) {
+        users.validate('jdoe', '123', {}, function (err, profile) {
           expect(err).to.be.null;
-          expect(profile.id).to.equal("jdoe");
-          expect(profile.name.givenName).to.equal("john");
-          expect(profile.name.familyName).to.equal("doe");
-          expect(profile.nickname).to.equal("jdoe");
+          expect(profile.id).to.equal('jdoe');
+          expect(profile.name.givenName).to.equal('john');
+          expect(profile.name.familyName).to.equal('doe');
+          expect(profile.nickname).to.equal('jdoe');
           expect(profile.emails.length).to.equal(1);
-          expect(profile.emails[0].value).to.equal("jdoe@example.org");
+          expect(profile.emails[0].value).to.equal('jdoe@example.org');
           expect(profile.groups.length).to.equal(2);
-          expect(profile.groups).to.have.members(["administrators", "users"]);
+          expect(profile.groups).to.have.members(['administrators', 'users']);
           done();
         });
       });
 
-      describe("when username contains previously escaped characters", function () {
-        it("should return user profile", function (done) {
+      describe('when username contains previously escaped characters', function () {
+        it('should return user profile', function (done) {
           const users = new Users();
 
           users.validate(
-            "jd\\28\\29e",
-            "123",
+            'jd\\28\\29e',
+            '123',
             { escaped: true },
             function (err, profile) {
               expect(err).to.be.null;
-              expect(profile.id).to.equal("jd()e");
-              expect(profile.name.givenName).to.equal("john");
-              expect(profile.name.familyName).to.equal("doe");
-              expect(profile.nickname).to.equal("jd()e");
+              expect(profile.id).to.equal('jd()e');
+              expect(profile.name.givenName).to.equal('john');
+              expect(profile.name.familyName).to.equal('doe');
+              expect(profile.nickname).to.equal('jd()e');
               expect(profile.emails.length).to.equal(1);
-              expect(profile.emails[0].value).to.equal("jd()e@example.org");
+              expect(profile.emails[0].value).to.equal('jd()e@example.org');
               expect(profile.groups.length).to.equal(1);
-              expect(profile.groups).to.have.members(["users"]);
+              expect(profile.groups).to.have.members(['users']);
               done();
             }
           );
         });
       });
 
-      describe("when username contains not previously escaped characters", function () {
-        it("should return user profile", function (done) {
+      describe('when username contains not previously escaped characters', function () {
+        it('should return user profile', function (done) {
           const users = new Users();
 
           users.validate(
-            "jd()e",
-            "123",
+            'jd()e',
+            '123',
             { escaped: false },
             function (err, profile) {
               expect(err).to.be.null;
-              expect(profile.id).to.equal("jd()e");
-              expect(profile.name.givenName).to.equal("john");
-              expect(profile.name.familyName).to.equal("doe");
-              expect(profile.nickname).to.equal("jd()e");
+              expect(profile.id).to.equal('jd()e');
+              expect(profile.name.givenName).to.equal('john');
+              expect(profile.name.familyName).to.equal('doe');
+              expect(profile.nickname).to.equal('jd()e');
               expect(profile.emails.length).to.equal(1);
-              expect(profile.emails[0].value).to.equal("jd()e@example.org");
+              expect(profile.emails[0].value).to.equal('jd()e@example.org');
               expect(profile.groups.length).to.equal(1);
-              expect(profile.groups).to.have.members(["users"]);
+              expect(profile.groups).to.have.members(['users']);
               done();
             }
           );
@@ -142,36 +146,36 @@ describe("users", function () {
       });
     });
 
-    describe("when user does not exist", function () {
-      it("should return wrong username error", function (done) {
+    describe('when user does not exist', function () {
+      it('should return wrong username error', function (done) {
         const users = new Users();
 
-        users.validate("cdoe", "123", function (err, profile) {
-          expect(err.name).to.equal("WrongUsername");
+        users.validate('cdoe', '123', function (err, profile) {
+          expect(err.name).to.equal('WrongUsername');
           expect(profile).to.be.undefined;
           done();
         });
       });
     });
 
-    describe("when password is not specified", function () {
-      it("should return wrong password error", function (done) {
+    describe('when password is not specified', function () {
+      it('should return wrong password error', function (done) {
         const users = new Users();
 
-        users.validate("jdoe", "", function (err, profile) {
-          expect(err.name).to.equal("WrongPassword");
+        users.validate('jdoe', '', function (err, profile) {
+          expect(err.name).to.equal('WrongPassword');
           expect(profile).to.be.undefined;
           done();
         });
       });
     });
 
-    describe("when password is not valid", function () {
-      it("should return wrong password error", function (done) {
+    describe('when password is not valid', function () {
+      it('should return wrong password error', function (done) {
         const users = new Users();
 
-        users.validate("jdoe", "456", function (err, profile) {
-          expect(err.name).to.equal("WrongPassword");
+        users.validate('jdoe', '456', function (err, profile) {
+          expect(err.name).to.equal('WrongPassword');
           expect(profile).to.be.undefined;
           done();
         });
@@ -179,63 +183,63 @@ describe("users", function () {
     });
   });
 
-  describe("list", function () {
-    describe("when the specified filter is valid", function () {
-      describe("and a matching record exists", function () {
-        it("should return the user profile when the query contains no escaped characters", function (done) {
+  describe('list', function () {
+    describe('when the specified filter is valid', function () {
+      describe('and a matching record exists', function () {
+        it('should return the user profile when the query contains no escaped characters', function (done) {
           const users = new Users();
 
-          users.list("jdoe", {}, function (err, users) {
+          users.list('jdoe', {}, function (err, users) {
             expect(err).to.be.null;
             expect(users.length).to.equal(1);
-            expect(users[0].id).to.equal("jdoe");
-            expect(users[0].name.givenName).to.equal("john");
-            expect(users[0].name.familyName).to.equal("doe");
-            expect(users[0].nickname).to.equal("jdoe");
+            expect(users[0].id).to.equal('jdoe');
+            expect(users[0].name.givenName).to.equal('john');
+            expect(users[0].name.familyName).to.equal('doe');
+            expect(users[0].nickname).to.equal('jdoe');
             expect(users[0].emails.length).to.equal(1);
-            expect(users[0].emails[0].value).to.equal("jdoe@example.org");
+            expect(users[0].emails[0].value).to.equal('jdoe@example.org');
             done();
           });
         });
 
-        it("should return the user profile when the query contains previously escaped characters", function (done) {
+        it('should return the user profile when the query contains previously escaped characters', function (done) {
           const users = new Users();
 
-          users.list("jd\\28\\29e", { escaped: true }, function (err, users) {
+          users.list('jd\\28\\29e', { escaped: true }, function (err, users) {
             expect(err).to.be.null;
             expect(users.length).to.equal(1);
-            expect(users[0].id).to.equal("jd()e");
-            expect(users[0].name.givenName).to.equal("john");
-            expect(users[0].name.familyName).to.equal("doe");
-            expect(users[0].nickname).to.equal("jd()e");
+            expect(users[0].id).to.equal('jd()e');
+            expect(users[0].name.givenName).to.equal('john');
+            expect(users[0].name.familyName).to.equal('doe');
+            expect(users[0].nickname).to.equal('jd()e');
             expect(users[0].emails.length).to.equal(1);
-            expect(users[0].emails[0].value).to.equal("jd()e@example.org");
+            expect(users[0].emails[0].value).to.equal('jd()e@example.org');
             done();
           });
         });
 
-        it("should return the user profile when the query contains non-previously escaped characters", function (done) {
+        it('should return the user profile when the query contains non-previously escaped characters', function (done) {
           const users = new Users();
 
-          users.list("jd()e", { escaped: false }, function (err, users) {
+          users.list('jd()e', { escaped: false }, function (err, users) {
             expect(err).to.be.null;
             expect(users.length).to.equal(1);
-            expect(users[0].id).to.equal("jd()e");
-            expect(users[0].name.givenName).to.equal("john");
-            expect(users[0].name.familyName).to.equal("doe");
-            expect(users[0].nickname).to.equal("jd()e");
+            expect(users[0].id).to.equal('jd()e');
+            expect(users[0].name.givenName).to.equal('john');
+            expect(users[0].name.familyName).to.equal('doe');
+            expect(users[0].nickname).to.equal('jd()e');
             expect(users[0].emails.length).to.equal(1);
-            expect(users[0].emails[0].value).to.equal("jd()e@example.org");
+            expect(users[0].emails[0].value).to.equal('jd()e@example.org');
             done();
           });
         });
       });
 
-      describe("and no matching record exists", function () {
-        it("should return empty results", function (done) {
+      describe('and no matching record exists', function () {
+        it('should return empty results', function (done) {
           const users = new Users();
 
-          users.list("cdoe", {}, function (err, users) {
+          users.list('cdoe', {}, function (err, users) {
             expect(err).to.be.null;
             expect(users.length).to.equal(0);
             done();
@@ -244,11 +248,11 @@ describe("users", function () {
       });
     });
 
-    describe("when the specified filter is not valid", function () {
-      it("should return empty results", function (done) {
+    describe('when the specified filter is not valid', function () {
+      it('should return empty results', function (done) {
         const users = new Users();
 
-        users.list("jsm\\t)*(", {}, function (err, users) {
+        users.list('jsm\\t)*(', {}, function (err, users) {
           expect(err).to.be.null;
           expect(users.length).to.equal(0);
           done();
@@ -256,35 +260,35 @@ describe("users", function () {
       });
     });
 
-    describe("when no filter is specified", function () {
-      describe("and it is an empty string", function () {
-        it("should find all users", function (done) {
+    describe('when no filter is specified', function () {
+      describe('and it is an empty string', function () {
+        it('should find all users', function (done) {
           const users = new Users();
 
-          users.list("", {}, function (err, users) {
+          users.list('', {}, function (err, users) {
             expect(err).to.be.null;
             expect(users.length).to.equal(3);
             expect(users.map((u) => u.id)).to.have.members([
-              "jdoe",
-              "mdoe",
-              "jd()e",
+              'jdoe',
+              'mdoe',
+              'jd()e',
             ]);
             done();
           });
         });
       });
 
-      describe("and it is undefined", function () {
-        it("should find all users", function (done) {
+      describe('and it is undefined', function () {
+        it('should find all users', function (done) {
           const users = new Users();
 
           users.list(undefined, {}, function (err, users) {
             expect(err).to.be.null;
             expect(users.length).to.equal(3);
             expect(users.map((u) => u.id)).to.have.members([
-              "jdoe",
-              "mdoe",
-              "jd()e",
+              'jdoe',
+              'mdoe',
+              'jd()e',
             ]);
             done();
           });
