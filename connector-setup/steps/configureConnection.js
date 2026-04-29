@@ -1,7 +1,5 @@
 const axios = require('axios');
 const urlJoin = require('url-join');
-const fs = require('fs');
-const path = require('path');
 const os = require('os');
 
 const thumbprint = require('@auth0/thumbprint');
@@ -17,7 +15,7 @@ function pemToCert (pem) {
     return cert[1].replace(/[\n|\r\n]/g, '');
   }
   return null;
-};
+}
 
 async function configureConnection({ provisioningTicket, connectionName }) {
   const serverUrl = config.get('SERVER_URL') || 'http://' + os.hostname() + ':' + (config.get('PORT') || 4000);

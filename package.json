@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "lint:check": "npx eslint admin/**/*.js connector-setup/**/*.js lib/** test/**/*.js",
-    "lint:fix": "npx eslint admin/** connector-setup/** lib/** test/** --fix",
+    "lint:fix": "npx eslint admin/**/*.js connector-setup/**/*.js lib/** test/**/*.js --fix",
     "test": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha --recursive --timeout 50000 --reporter spec --exit",
     "snyk": "snyk test",
     "start": "node server.js",
