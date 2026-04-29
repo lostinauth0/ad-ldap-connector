@@ -1,33 +1,33 @@
-var WebSocket = require('ws');
-var EventEmitter = require('events').EventEmitter;
-var async = require('async');
-var cb = require('cb');
-var ms = require('ms');
+const WebSocket = require('ws');
+const EventEmitter = require('events').EventEmitter;
+const async = require('async');
+const cb = require('cb');
+const ms = require('ms');
 
-var exit = require('./lib/exit');
-var jwt = require('jsonwebtoken');
-var config = require('./lib/config');
+const exit = require('./lib/exit');
+const jwt = require('jsonwebtoken');
+const config = require('./lib/config');
 const secureStorage = require('./lib/secureStorage');
-var Users = require('./lib/users');
-var users = new Users();
+const Users = require('./lib/users');
+const users = new Users();
 
-var authenticate_when_password_expired = config.get('ALLOW_PASSWORD_EXPIRED');
-var authenticate_when_password_change_required = config.get('ALLOW_PASSWORD_CHANGE_REQUIRED');
+const authenticate_when_password_expired = config.get('ALLOW_PASSWORD_EXPIRED');
+const authenticate_when_password_change_required = config.get('ALLOW_PASSWORD_CHANGE_REQUIRED');
 
-var socket_server_address = config.get('AD_HUB').replace(/^http/i, 'ws');
+const socket_server_address = config.get('AD_HUB').replace(/^http/i, 'ws');
 
-var AccountDisabled = require('./lib/errors/AccountDisabled');
-var AccountExpired = require('./lib/errors/AccountExpired');
-var AccountLocked = require('./lib/errors/AccountLocked');
-var PasswordChangeRequired = require('./lib/errors/PasswordChangeRequired');
-var PasswordExpired = require('./lib/errors/PasswordExpired');
-var WrongPassword = require('./lib/errors/WrongPassword');
-var WrongUsername = require('./lib/errors/WrongUsername');
-var InsufficientAccessRightsError = require('./lib/errors/InsufficientAccessRightsError');
-var PasswordComplexityError = require('./lib/errors/PasswordComplexityError');
+const AccountDisabled = require('./lib/errors/AccountDisabled');
+const AccountExpired = require('./lib/errors/AccountExpired');
+const AccountLocked = require('./lib/errors/AccountLocked');
+const PasswordChangeRequired = require('./lib/errors/PasswordChangeRequired');
+const PasswordExpired = require('./lib/errors/PasswordExpired');
+const WrongPassword = require('./lib/errors/WrongPassword');
+const WrongUsername = require('./lib/errors/WrongUsername');
+const InsufficientAccessRightsError = require('./lib/errors/InsufficientAccessRightsError');
+const PasswordComplexityError = require('./lib/errors/PasswordComplexityError');
 var ws;
 
-var emitter = new EventEmitter();
+const emitter = new EventEmitter();
 emitter.close = () => ws && ws.close();
 
 // reconnection interval
