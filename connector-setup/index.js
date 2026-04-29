@@ -108,7 +108,6 @@ exports.run = async function() {
   config.set('CONNECTION', ticketInfo.connectionName);
   config.set('CLIENT_CERT_AUTH', ticketInfo.certAuth);
   config.set('KERBEROS_AUTH', ticketInfo.kerberos);
-  config.set('FIREWALL_RULE_CREATED', ticketInfo.kerberos);
   config.set('REALM', ticketInfo.realm.name);
   config.set('SITE_NAME', config.get('SITE_NAME') || ticketInfo.connectionName);
   config.set(ticketInfo.realm.name, ticketInfo.realm.postTokenUrl);
