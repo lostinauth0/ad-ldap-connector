@@ -1,6 +1,6 @@
 const ldap = require('ldapjs');
-const db = require('./test/resources/mock_ldap_data.json');
-const config = require('./lib/config');
+const db = require('./mock_ldap_data.json');
+const config = require('../lib/config');
 const BASE_DN = 'dc=example,dc=org';
 const LDAP_SERVER_PORT = 4444;
 

@@ -28,12 +28,12 @@ echo "Temp install sources path is $tmpInstallSourcesDir"
 # Copy explicit allow list of files/dirs to include in the installer
 $itemsToCopy = @(
     'admin',
+    'mock-ldap',
     'connector-setup',
     'lib',
     'node_modules',
     'public',
     'views',
-    '.eslintrc',
     '.nvmrc',
     '.npmrc',
     'CENTOS.md',
@@ -41,7 +41,6 @@ $itemsToCopy = @(
     'endpoints.js',
     'eventlog.js',
     'latency_test.js',
-    'mock-ldap-server.js',
     'LICENSE.rtf',
     'LICENSE.txt',
     'package.json',

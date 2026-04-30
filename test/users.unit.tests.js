@@ -1,7 +1,7 @@
 const config = require('../lib/config');
 const expect = require('chai').expect;
 const Users = require('../lib/users');
-const mockLdapServer = require('../mock-ldap-server');
+const mockLdapServer = require('../mock-ldap/mock-ldap-server');
 
 // These unit tests use a mocked in-memory ldap server implementation running on localhost.
 // The mock server is implemented in ../mock_ldap_server.js
