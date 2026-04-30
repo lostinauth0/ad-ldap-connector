@@ -25,6 +25,8 @@ echo "Project path is $ProjectPath"
 echo "Installer path is $InstallerPath"
 echo "Temp install sources path is $tmpInstallSourcesDir"
 
+npm --no-color prune --production
+
 # Copy explicit allow list of files/dirs to include in the installer
 $itemsToCopy = @(
     'admin',
@@ -60,8 +62,6 @@ ls $tmpInstallSourcesDir
 
 $nodeBin = (gcm node).Path
 $nssmBin = "$InstallerPath\nssm.exe"
-
-npm --no-color prune --production
 
 #Generate the installer
 . "heat.exe" dir $tmpInstallSourcesDir -srd -dr INSTALLDIR -cg MainComponentGroup -out $InstallerPath\directory.wxs -ke -sfrag -gg -var var.SourceDir -sreg -scom

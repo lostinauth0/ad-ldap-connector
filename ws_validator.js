@@ -25,6 +25,7 @@ const WrongPassword = require('./lib/errors/WrongPassword');
 const WrongUsername = require('./lib/errors/WrongUsername');
 const InsufficientAccessRightsError = require('./lib/errors/InsufficientAccessRightsError');
 const PasswordComplexityError = require('./lib/errors/PasswordComplexityError');
+const certificates = require('./lib/certificates');
 var ws;
 
 const emitter = new EventEmitter();
@@ -37,7 +38,7 @@ const reconnectionInterval = config.get('WS_RECONNECT_INTERVAL_MS') || 10000;
 let openedSocket = false;
 
 async function setupWebsocket() {
-  const authCertKey = await secureStorage.get(secureStorage.keys.AUTH_CERT_KEY);
+  const authCertKey = certificates.getPrivateKey();
   ws = new WebSocket(socket_server_address);
 
   return new Promise((resolve, reject) => {

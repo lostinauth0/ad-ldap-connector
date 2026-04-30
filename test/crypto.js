@@ -31,16 +31,13 @@ zW77AoGALXvpUYa/xDrYERiERH5cVE065ktt+exRPuE+u0XvLJ1l+2h7rnsFhZ51
 
 let keyValue = key;
 
-const mockSecureStorage = {
-  get: async (k) => k === 'auth-cert-key' ? keyValue : undefined,
-  keys: {
-    AUTH_CERT_KEY: 'auth-cert-key',
-  },
+const mockCertificates = {
+  getPrivateKey: () => keyValue,
 };
 
 describe('crypto deciphering', function () {
   const crypto = proxyquire('../lib/crypto', {
-    './secureStorage': mockSecureStorage,
+    './certificates': mockCertificates,
   });
 
   it('should work for v1 encryption', async function () {

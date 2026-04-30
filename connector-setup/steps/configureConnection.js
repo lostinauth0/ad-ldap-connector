@@ -4,7 +4,7 @@ const os = require('os');
 
 const thumbprint = require('@auth0/thumbprint');
 const config = require('../../lib/config');
-const secureStorage = require('../../lib/secureStorage');
+const certificates = require('../../lib/certificates');
 
 function pemToCert (pem) {
   var cert =
@@ -20,7 +20,7 @@ function pemToCert (pem) {
 async function configureConnection({ provisioningTicket, connectionName }) {
   const serverUrl = config.get('SERVER_URL') || 'http://' + os.hostname() + ':' + (config.get('PORT') || 4000);
   const signInEndpoint = urlJoin(serverUrl, '/wsfed');
-  const pem = await secureStorage.get(secureStorage.keys.AUTH_CERT);
+  const pem = certificates.getCertificate();
   const cert = pemToCert(pem);
   const certThumbprint = thumbprint.calculate(cert);
 
