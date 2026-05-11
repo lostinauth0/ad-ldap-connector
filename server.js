@@ -75,8 +75,11 @@ console.log('Maximum header size = ' + maxHeaderSize);
   latency_test.run_many(10);
 
   if (!config.get('KERBEROS_AUTH') && !config.get('CLIENT_CERT_AUTH')) {
+    console.error('Neither KERBEROS_AUTH nor CLIENT_CERT_AUTH is enabled. Please edit config.json to enable at least one authentication method.');
     return;
   }
+
+  await config.save();
 
   require('./lib/setupPassport');
 
