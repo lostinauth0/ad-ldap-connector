@@ -152,6 +152,11 @@ async function registerRoutes(app) {
       secret: sessionSecret,
       saveUninitialized: false,
       resave: false,
+      cookie: {
+        maxAge: 8 * 60 * 60 * 1000,
+        httpOnly: true,
+        sameSite: 'strict',
+      },
     })
   );
 
