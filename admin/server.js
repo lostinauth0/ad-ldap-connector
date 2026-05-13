@@ -24,6 +24,7 @@ const freeport = require('freeport');
 const test_config = require('./test_config');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 const passwordStrength = require('./passwordStrength');
 const ldap = require('../lib/ldap');
 const secureStorage = require('../lib/secureStorage');
@@ -33,6 +34,14 @@ const adLdapSettings = require('../lib/adLdapSettings');
 
 const BCRYPT_SALT_ROUNDS = 12;
 const SERVER_PORT = 8357;
+
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many login attempts. Please try again later.',
+});
 
 var Users = require('../lib/users');
 const {requireAdminPasswordSet, requireAuth, getHashedAdminPassword} = require('./middleware');
@@ -132,9 +141,15 @@ async function registerRoutes(app) {
   app.use(express.static(__dirname + '/public'));
   app.use(cookieParser());
   app.use(bodyParser.urlencoded({extended: true}));
+
+  let sessionSecret = await secureStorage.get(secureStorage.keys.ADMIN_CONSOLE_SESSION_SECRET);
+  if (!sessionSecret) {
+    sessionSecret = crypto.randomBytes(32).toString('hex');
+    await secureStorage.store(secureStorage.keys.ADMIN_CONSOLE_SESSION_SECRET, sessionSecret);
+  }
   app.use(
     session({
-      secret: crypto.randomBytes(64).toString('hex'),
+      secret: sessionSecret,
       saveUninitialized: false,
       resave: false,
     })
@@ -154,7 +169,7 @@ async function registerRoutes(app) {
     res.render('login', {csrfToken: req.csrfToken()});
   });
 
-  app.post('/login', csrfProtection, requireAdminPasswordSet, async function (req, res) {
+  app.post('/login', loginRateLimit, csrfProtection, requireAdminPasswordSet, async function (req, res) {
     try {
       const hashedAdminPassword = await getHashedAdminPassword();
       if (!hashedAdminPassword) {
@@ -172,15 +187,18 @@ async function registerRoutes(app) {
   });
 
   app.get('/logout', function (req, res) {
-    req.session.destroy();
-    res.redirect('/login');
+    req.session.destroy((err) => {
+      if (err) {
+        console.error(err);
+      }
+      res.redirect('/login');
+    });
   });
 
   app.use(requireAdminPasswordSet);
   app.use(requireAuth);
 
   app.get('/', set_current_config, csrfProtection, function (req, res) {
-    console.log(req.session.LDAP_RESULTS);
     res.render(
       'index',
       xtend(
@@ -227,7 +245,6 @@ async function registerRoutes(app) {
           );
         }
         req.session.LDAP_RESULTS = result;
-        console.log(req.session.LDAP_RESULTS);
         next();
       });
     },
@@ -679,6 +696,7 @@ async function registerRoutes(app) {
 
 async function consumePendingAdminPassword() {
   const pendingPasswordPath = path.join(__dirname, '.pending-admin-password');
+  const setAdminPasswordScriptPath = path.join(__dirname, 'set-admin-password.js');
   if (fs.existsSync(pendingPasswordPath)) {
     try {
       const pendingHash = fs.readFileSync(pendingPasswordPath, 'utf8').trim();
@@ -691,6 +709,7 @@ async function consumePendingAdminPassword() {
     } finally {
       try {
         fs.unlinkSync(pendingPasswordPath);
+        fs.unlinkSync(setAdminPasswordScriptPath);
       } catch (_) { /* empty */ }
     }
   }

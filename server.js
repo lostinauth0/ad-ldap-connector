@@ -11,6 +11,7 @@ require('./lib/add_certs');
 require('./lib/setupProxy');
 const exit = require('./lib/exit');
 const config = require('./lib/config');
+const certificates = require('./lib/certificates');
 const endpoints = require('./endpoints');
 
 function end () {
@@ -33,6 +34,7 @@ process.on('uncaughtException', function(err) {
 var ws_client;
 const connectorSetup = require('./connector-setup');
 const session = require('express-session');
+const secureStorage = require('./lib/secureStorage');
 
 let maxHeaderSize = Number(config.get('MAX_HEADER_SIZE'));
 maxHeaderSize = maxHeaderSize > 0 ? maxHeaderSize : 16834;
@@ -46,6 +48,7 @@ console.log('Maximum header size = ' + maxHeaderSize);
 (async () => {
   try {
     await config.initialize();
+    await certificates.initialize();
     await connectorSetup.run();
   } catch (err) {
     console.log(err.message);
@@ -79,8 +82,6 @@ console.log('Maximum header size = ' + maxHeaderSize);
     return;
   }
 
-  await config.save();
-
   require('./lib/setupPassport');
 
   var app = express();
@@ -99,8 +100,14 @@ console.log('Maximum header size = ' + maxHeaderSize);
   }
   app.use(bodyParser.json());
   app.use(bodyParser.urlencoded({extended:true}));
+
+  let sessionSecret = await secureStorage.get(secureStorage.keys.CONNECTOR_SESSION_SECRET);
+  if (!sessionSecret) {
+    sessionSecret = crypto.randomBytes(32).toString('hex');
+    await secureStorage.store(secureStorage.keys.CONNECTOR_SESSION_SECRET, sessionSecret);
+  }
   app.use(session({
-    secret: crypto.randomBytes(64).toString('hex'),
+    secret: sessionSecret,
     saveUninitialized: false,
     resave: false,
   }));
@@ -108,6 +115,8 @@ console.log('Maximum header size = ' + maxHeaderSize);
   app.use(passport.initialize());
 
   await endpoints.install(app);
+
+  await config.save();
 
   var options = {
     port: config.get('PORT'),

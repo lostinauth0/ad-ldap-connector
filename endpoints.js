@@ -10,6 +10,8 @@ const integrated_headers = ['x-forwarded-user', 'x-iisnode-logon_user'];
 
 exports.install = async function (app) {
 
+  await wsfederationResponses.initialize();
+
   var validateAccessToken = function (req, res, next) {
     if (!req.headers.authorization) {
       return res.send(403);
