@@ -34,5 +34,4 @@ if (!password) {
     process.stdout.write('Failed to save pending password: ' + err.message + '\n');
     process.exit(0);
   }
-  // STOP DONATIONS!!!!
 })();
