@@ -1,4 +1,4 @@
-const exec = require('child_process').exec;
+const execAsync = require('util').promisify(require('child_process').exec);
 const path = require('path');
 const process = require('node:process');
 const secureStorage = require('../lib/secureStorage');
@@ -42,27 +42,20 @@ function run(cmd, args, callback) {
 
 async function detectLdapSettings() {
   const detected = {};
-  if (process.platform === 'win32') {
-    return new Promise((resolve, reject) => {
-      exec(
-        '"' + __dirname + '//settings_detector.exe"',
-        function (err, stdout, stderr) {
-          try {
-            const parsed = JSON.parse(stdout);
-            console.log(parsed);
-            if (!parsed.error) {
-              detected.LDAP_BASE = parsed.baseDN;
-              detected.LDAP_URL = 'ldap://' + parsed.domainController;
-            }
-          } catch (ex) {
-            // don't care
-          } finally {
-            resolve(detected);
-          }
-        }
-      );
-    });
+  try {
+    if (process.platform === 'win32') {
+      const output = await execAsync('"' + __dirname + '//settings_detector.exe"');
+      const parsed = JSON.parse(output);
+      console.log(parsed);
+      if (!parsed.error) {
+        detected.LDAP_BASE = parsed.baseDN;
+        detected.LDAP_URL = 'ldap://' + parsed.domainController;
+      }
+    }
+  } catch (err) {
+    // don't care
   }
+  return detected;
 }
 
 /**

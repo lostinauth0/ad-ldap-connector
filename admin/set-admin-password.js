@@ -27,7 +27,7 @@ if (!password) {
     fs.writeFileSync(filePath, hash, 'utf8');
     await filePermissions.restrict({
       filePath,
-      platform: process.platorm,
+      platform: process.platform,
       execAsync
     });
   } catch (err) {

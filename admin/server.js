@@ -109,8 +109,14 @@ async function registerRoutes(app) {
         errorMessage: 'Invalid password'
       });
     }
-    req.session.authenticated = true;
-    res.redirect('/');
+    req.session.regenerate((err) => {
+      if (err) {
+        throw new Error(err.message);
+      }
+
+      req.session.authenticated = true;
+      res.redirect('/');
+    });
   });
 
   app.get('/logout', function (req, res) {

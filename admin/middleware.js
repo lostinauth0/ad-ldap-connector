@@ -52,7 +52,7 @@ async function mergeConfig(req, res, next) {
     for (const key of Object.keys(newConfig)) {
       config.set(key, newConfig[key]);
     }
-    await config.save(true);
+    await config.save();
 
     if (req.body.LDAP_URL || req.body.PORT || req.body.SERVER_URL) {
       return restartServer(function () {
@@ -72,7 +72,6 @@ function setCurrentConfig(req, res, next) {
 }
 
 module.exports = {
-  getHashedAdminPassword,
   requireAuth,
   requireAdminPasswordSet,
   mergeConfig,
