@@ -35,6 +35,7 @@ describe('lib/ldap initialize()', function () {
       values: {},
       get: function (key) { return this.values[key]; },
       set: function (key, val) { this.values[key] = val; },
+      clear: function (key) { delete this.values[key]; },
     };
 
     mockSecureStorage = {

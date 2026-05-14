@@ -96,7 +96,7 @@ async function registerRoutes(app) {
     });
   });
 
-  app.post('/login', loginRateLimit, csrfProtection, requireAdminPasswordSet, async function (req, res) {
+  app.post('/login', loginRateLimit, csrfProtection, requireAdminPasswordSet, async function (req, res, next) {
     const hashedAdminPassword = await getHashedAdminPassword();
     if (!hashedAdminPassword) {
       throw new Error('Admin password not found in keychain.');
@@ -111,7 +111,7 @@ async function registerRoutes(app) {
     }
     req.session.regenerate((err) => {
       if (err) {
-        throw new Error(err.message);
+        return next(err);
       }
 
       req.session.authenticated = true;
