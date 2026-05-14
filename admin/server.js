@@ -403,22 +403,17 @@ async function registerRoutes(app) {
         })
         .on('close', function () {
           restart_server(function () {
-            res.render(
-              'index',
-              xtend(read_current_config(), {
-                SUCCESS: true,
-              })
-            );
+            res.redirect('/');
           });
         }).on('error', err => {
-        console.error(err);
-        return res.render(
-          'index',
-          xtend(req.current_config, {
-            ERROR: 'Upload a valid zip file.',
-          })
-        );
-      });
+          console.error(err);
+          return res.render(
+            'index',
+            xtend(req.current_config, {
+              ERROR: 'Upload a valid zip file.',
+            })
+          );
+        });
     }
   );
 

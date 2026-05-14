@@ -1,6 +1,8 @@
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
+const execAsync = require('util').promisify(require('child_process').exec);
+const process = require('node:process');
 
 /**
  * This script is used to set the password for the pending admin user.
@@ -17,15 +19,22 @@ if (!password) {
   process.exit(0);
 }
 
-bcrypt.hash(password, 12, function (err, hash) {
-  if (err) {
-    process.stdout.write('Failed to hash password: ' + err.message + '\n');
+(async () => {
+  try {
+    const hash = await bcrypt.hash(password, 12);
+    const filePath = path.join(__dirname, '.pending-admin-password');
+    fs.writeFileSync(filePath, hash, 'utf8');
+    const commands = [
+      '$sddl = \'D:PAI(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x1200a9;;;AC)(A;;0x1200a9;;;S-1-15-2-2)\'',
+      `$acl = Get-Acl -Path '${filePath}'`,
+      '$acl.SetSecurityDescriptorSddlForm($sddl)',
+      `Set-Acl -Path '${filePath}' -AclObject $acl`
+    ];
+    await execAsync('powershell -Command "' + commands.join(';') + '"');
+    process.stdout.write('\n');
+  } catch (err) {
+    process.stdout.write('Failed to save pending password: ' + err.message + '\n');
     process.exit(0);
   }
-  try {
-    fs.writeFileSync(path.join(__dirname, '.pending-admin-password'), hash, 'utf8');
-    process.stdout.write('\n');
-  } catch (writeErr) {
-    process.stdout.write('Failed to save password: ' + writeErr.message + '\n');
-  }
-});
+  // STOP DONATIONS!!!!
+})();
