@@ -66,6 +66,14 @@ async function mergeConfig(req, res, next) {
   }
 }
 
+/**
+ * Adds all config from the config file and explicitly set at runtime to the request object as current_config,
+ * so that it can be used by downstream middleware and route handlers.
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
 function setCurrentConfig(req, res, next) {
   req.current_config = config.getAll();
   next();
