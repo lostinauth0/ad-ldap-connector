@@ -18,7 +18,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const session = require('express-session');
 const xtend = require('xtend');
-const exec = require('child_process').exec;
 const app = express();
 const freeport = require('freeport');
 const test_config = require('./test_config');
@@ -31,6 +30,7 @@ const secureStorage = require('../lib/secureStorage');
 const certificates = require('../lib/certificates');
 const { loadProvisioningTicket } = require('../lib/provisioningTicket');
 const adLdapSettings = require('../lib/adLdapSettings');
+const { run, restartServer, getHashedAdminPassword, detectLdapSettings, redirectWithError } = require('./utils');
 
 const BCRYPT_SALT_ROUNDS = 12;
 const SERVER_PORT = 8357;
@@ -44,96 +44,15 @@ const loginRateLimit = rateLimit({
 });
 
 var Users = require('../lib/users');
-const {requireAdminPasswordSet, requireAuth, getHashedAdminPassword} = require('./middleware');
+const {
+  requireAdminPasswordSet,
+  requireAuth,
+  mergeConfig,
+  setCurrentConfig
+} = require('./middleware');
 
 const csrfProtection = csrf({cookie: true});
-var detected_settings = {};
-
-function set_current_config(req, res, next) {
-  req.current_config = config.getAll();
-  next();
-}
-
-function restart_server(cb) {
-  // required to test immediately after configuration
-  require('../lib/config');
-  Users = require('../lib/users');
-
-  if (process.platform === 'win32') {
-    console.log('Restarting Auth0 ADLDAP Service...');
-    return exec('net stop "Auth0 ADLDAP"', function () {
-      exec('net start "Auth0 ADLDAP"', function () {
-        console.log('Done.');
-        setTimeout(function () {
-          return cb();
-        }, 2000);
-      });
-    });
-  }
-
-  cb();
-}
-
-async function merge_config(req, res) {
-  var newConfig = xtend(req.current_config, req.body);
-  for(const key of Object.keys(newConfig)) {
-    config.set(key, newConfig[key]);
-  }
-  await config.save();
-
-  if (req.body.LDAP_URL || req.body.PORT || req.body.SERVER_URL) {
-    return restart_server(function () {
-      return res.redirect('/?s=1');
-    });
-  }
-
-  res.redirect('/');
-}
-
-function run(cmd, args, callback) {
-  const spawn = require('child_process').spawn;
-  const dir = path.dirname(cmd);
-  const processName = path.basename(cmd);
-  const options = {shell: true};
-  if (dir !== '.') {
-    options.cwd = dir;
-  }
-  const command = spawn(processName, args, options);
-  let result = '';
-  command.stderr.on('data', function (data) {
-    result += data.toString();
-  });
-  command.stdout.on('data', function (data) {
-    result += data.toString();
-  });
-  command.on('close', function (code) {
-    return callback(result);
-  });
-}
-
-async function detectLdapSettings() {
-  if (process.platform === 'win32') {
-    return new Promise((resolve, reject) => {
-      exec(
-        '"' + __dirname + '//settings_detector.exe"',
-        function (err, stdout, stderr) {
-          try {
-            const parsed = JSON.parse(stdout);
-            console.log(parsed);
-            if (!parsed.error) {
-              detected_settings.LDAP_BASE = parsed.baseDN;
-              detected_settings.LDAP_URL = 'ldap://' + parsed.domainController;
-            }
-          } catch (ex) {
-            // don't care
-          } finally {
-            resolve();
-          }
-        }
-      );
-    });
-  }
-}
+var detectedLdapSettings = {};
 
 async function registerRoutes(app) {
   app.set('views', __dirname + '/views');
@@ -171,24 +90,27 @@ async function registerRoutes(app) {
     if (req.session.authenticated) {
       return res.redirect('/');
     }
-    res.render('login', {csrfToken: req.csrfToken()});
+    res.render('login', {
+      csrfToken: req.csrfToken(),
+      ERROR: req.query.error,
+    });
   });
 
   app.post('/login', loginRateLimit, csrfProtection, requireAdminPasswordSet, async function (req, res) {
-    try {
-      const hashedAdminPassword = await getHashedAdminPassword();
-      if (!hashedAdminPassword) {
-        throw new Error('Admin password not found in keychain.');
-      }
-      const match = await bcrypt.compare(req.body.password || '', hashedAdminPassword);
-      if (!match) {
-        return res.render('login', {csrfToken: req.csrfToken(), ERROR: 'Invalid password.'});
-      }
-      req.session.authenticated = true;
-      res.redirect('/');
-    } catch (err) {
-      res.render('login', {csrfToken: req.csrfToken(), ERROR: 'Incorrect admin password.'});
+    const hashedAdminPassword = await getHashedAdminPassword();
+    if (!hashedAdminPassword) {
+      throw new Error('Admin password not found in keychain.');
     }
+    const match = await bcrypt.compare(req.body.password || '', hashedAdminPassword);
+    if (!match) {
+      return redirectWithError({
+        res,
+        url: 'login',
+        errorMessage: 'Invalid password'
+      });
+    }
+    req.session.authenticated = true;
+    res.redirect('/');
   });
 
   app.get('/logout', function (req, res) {
@@ -203,7 +125,7 @@ async function registerRoutes(app) {
   app.use(requireAdminPasswordSet);
   app.use(requireAuth);
 
-  app.get('/', set_current_config, csrfProtection, function (req, res) {
+  app.get('/', setCurrentConfig, csrfProtection, function (req, res) {
     res.render(
       'index',
       xtend(
@@ -214,7 +136,7 @@ async function registerRoutes(app) {
           LDAP_RESULTS: req.session.LDAP_RESULTS,
         },
         {
-          detected: detected_settings,
+          detected: detectedLdapSettings,
         },
         {
           csrfToken: req.csrfToken(),
@@ -226,7 +148,7 @@ async function registerRoutes(app) {
 
   app.post(
     '/ldap',
-    set_current_config,
+    setCurrentConfig,
     csrfProtection,
     function (req, res, next) {
       // Convert ENABLE_WRITE_BACK and ENABLE_ACTIVE_DIRECTORY_UNICODE_PASSWORD to boolean.
@@ -269,16 +191,19 @@ async function registerRoutes(app) {
           next();
         })
         .catch(function (err) {
-          res.render('index', xtend(req.current_config, req.body, {ERROR: err.message}));
+          redirectWithError({
+            res,
+            errorMessage: err.message
+          });
         });
     },
-    merge_config
+    mergeConfig
   );
 
   app.post(
     '/server',
     upload.single('SSL_PFX'),
-    set_current_config,
+    setCurrentConfig,
     csrfProtection,
     function (req, res, next) {
       if (req.body.PORT || req.current_config.PORT) return next();
@@ -294,38 +219,36 @@ async function registerRoutes(app) {
       req.body.SSL_PFX = req.file.buffer.toString('base64');
       next();
     },
-    merge_config
+    mergeConfig
   );
 
   app.post(
     '/ticket',
-    set_current_config,
+    setCurrentConfig,
     csrfProtection,
     async function (req, res, next) {
       if (!req.body.PROVISIONING_TICKET) {
-        return res.redirect('/?error=' + encodeURIComponent('Provisioning ticket URL is required.'));
+        return redirectWithError({
+          res,
+          errorMessage: 'Provisioning ticket URL is required.'
+        });
       }
 
       const provisioningTicket = req.body.PROVISIONING_TICKET;
-      try {
-        const ticketInfo = await loadProvisioningTicket(provisioningTicket);
-        req.body.AD_HUB = ticketInfo.adHub;
+      const ticketInfo = await loadProvisioningTicket(provisioningTicket);
+      req.body.AD_HUB = ticketInfo.adHub;
 
-        if (!detected_settings.LDAP_URL) {
-          const discoveredSettings = await adLdapSettings.discoverSettings(ticketInfo.connectionDomain);
-          console.dir(discoveredSettings);
-          detected_settings = discoveredSettings;
-        }
-        next();
-
-      } catch (err) {
-        return res.redirect(`/?error=${encodeURIComponent(err.message)}`);
+      if (!detectedLdapSettings.LDAP_URL) {
+        const discoveredSettings = await adLdapSettings.discoverSettings(ticketInfo.connectionDomain);
+        console.dir(discoveredSettings);
+        detectedLdapSettings = discoveredSettings;
       }
+      next();
     },
-    merge_config
+    mergeConfig
   );
 
-  app.get('/export', set_current_config, function (req, res) {
+  app.get('/export', setCurrentConfig, function (req, res) {
     console.log('Exporting configuration.');
 
     var today = new Date()
@@ -364,7 +287,7 @@ async function registerRoutes(app) {
 
   app.post(
     '/import',
-    set_current_config,
+    setCurrentConfig,
     csrfProtection,
     upload.single('IMPORT_FILE'),
     function (req, res, next) {
@@ -374,12 +297,11 @@ async function registerRoutes(app) {
         !req.file ||
         req.file.buffer.length === 0
       ) {
-        return res.render(
-          'index',
-          xtend(req.current_config, {
-            ERROR: 'Upload a valid zip file.',
-          })
-        );
+        return redirectWithError({
+          res,
+          errorMessage: 'Upload a valid zip file.',
+          anchor: 'export'
+        });
       }
 
       var valid_files = [
@@ -402,17 +324,17 @@ async function registerRoutes(app) {
           entry.pipe(fileWriteStream);
         })
         .on('close', function () {
-          restart_server(function () {
+          restartServer(function () {
+            Users = require('../lib/users');
             res.redirect('/');
           });
         }).on('error', err => {
           console.error(err);
-          return res.render(
-            'index',
-            xtend(req.current_config, {
-              ERROR: 'Upload a valid zip file.',
-            })
-          );
+          return redirectWithError({
+            res,
+            errorMessage: 'Upload a valid zip file.',
+            anchor: 'export'
+          });
         });
     }
   );
@@ -492,7 +414,7 @@ async function registerRoutes(app) {
             error: err,
           });
         } else {
-          return restart_server(function () {
+          return restartServer(function () {
             res.status(200);
             res.end();
           });
@@ -501,7 +423,7 @@ async function registerRoutes(app) {
     );
   });
 
-  app.get('/troubleshooter/run', set_current_config, function (req, res) {
+  app.get('/troubleshooter/run', setCurrentConfig, function (req, res) {
     run('node', [__dirname + '/../troubleshoot.js'], function (data) {
       data = data.replace(/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]/g, '').trim();
 
@@ -515,7 +437,7 @@ async function registerRoutes(app) {
 
   app.get(
     '/troubleshooter/export',
-    set_current_config,
+    setCurrentConfig,
     function (req, res, next) {
       console.log('Exporting test results.');
 
@@ -588,7 +510,7 @@ async function registerRoutes(app) {
   app.post(
     '/updater/run',
     csrfProtection,
-    set_current_config,
+    setCurrentConfig,
     function (req, res) {
       run(__dirname + '/../update-connector.cmd', [], function (data) {
         res.writeHead(200, {
@@ -661,36 +583,59 @@ async function registerRoutes(app) {
     });
   });
 
-  app.post('/password', set_current_config, csrfProtection, async function (req, res) {
+  app.post('/password', setCurrentConfig, csrfProtection, async function (req, res) {
     const currentPassword = req.body.current_password || '';
     const newPassword = req.body.new_password || '';
     const newPasswordConfirm = req.body.confirm_password || '';
 
-    function renderError(msg) {
-      res.redirect('/#security?error=' + encodeURIComponent(msg));
-    }
-
     if (!passwordStrength.validate(newPassword)) {
-      return renderError(passwordStrength.validateToString(newPassword));
+      return redirectWithError({
+        res,
+        errorMessage: passwordStrength.validateToString(newPassword),
+        anchor: 'security'
+      });
     }
 
     if (newPassword !== newPasswordConfirm) {
-      return renderError('Passwords do not match.');
+      return redirectWithError({
+        res,
+        errorMessage: 'Passwords do not match.',
+        anchor: 'security'
+      });
     }
 
     try {
       const hashedPassword = await getHashedAdminPassword();
       const match = await bcrypt.compare(currentPassword, hashedPassword || '');
       if (!match) {
-        return renderError('Current password is incorrect.');
+        return redirectWithError({
+          res,
+          errorMessage: 'Current password is incorrect.',
+          anchor: 'security'
+        });
       }
       const hashedNewPassword = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
       await secureStorage.store(secureStorage.keys.ADMIN_CONSOLE_PASSWORD, hashedNewPassword);
       res.redirect('/?s=1');
     } catch (err) {
       console.error(err);
-      return renderError('An error occurred while changing the password.');
+      return redirectWithError({
+        res,
+        errorMessage: 'An error occurred while changing the password.',
+        anchor: 'security'
+      });
     }
+  });
+}
+
+async function registerErrorHandler(app) {
+  app.use((err, req, res, next) => {
+    console.error(err.stack);
+    const message = err.message || 'Unknown error. Check logs for details.';
+    return redirectWithError({
+      res,
+      errorMessage: message
+    });
   });
 }
 
@@ -726,11 +671,12 @@ module.exports = app;
 (async function adminConsole() {
   await config.initialize();
   await certificates.initialize();
-  await detectLdapSettings();
+  detectedLdapSettings = await detectLdapSettings();
   await registerRoutes(app);
   await ldap.initialize();
   await config.save();
   await consumePendingAdminPassword();
   await cas.injectAsync();
+  await registerErrorHandler(app);
   await runServer();
 })();

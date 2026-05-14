@@ -1,20 +1,6 @@
-const secureStorage = require('../lib/secureStorage');
-
-/**
- * Gets the hashed admin password from the keychain. If it doesn't exist, or is empty, returns null.
- * @return {Promise<null|string>}
- */
-async function getHashedAdminPassword() {
-  try {
-    const hashedPassword = await secureStorage.get(secureStorage.keys.ADMIN_CONSOLE_PASSWORD);
-    if (!hashedPassword) {
-      return null;
-    }
-    return hashedPassword;
-  } catch {
-    return null;
-  }
-}
+const xtend = require('xtend');
+const config = require('../lib/config');
+const { restartServer, getHashedAdminPassword } = require('./utils');
 
 /**
  * Middleware to require authentication for admin routes. If no admin password is set, redirects to the setup page.
@@ -26,13 +12,17 @@ async function getHashedAdminPassword() {
  * @return {Promise<*>}
  */
 async function requireAuth(req, res, next) {
-  if (!(await getHashedAdminPassword())) {
-    return res.redirect('/setup');
+  try {
+    if (!(await getHashedAdminPassword())) {
+      return res.redirect('/setup');
+    }
+    if (!req.session.authenticated) {
+      return res.redirect('/login');
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-  if (!req.session.authenticated) {
-    return res.redirect('/login');
-  }
-  next();
 }
 
 /**
@@ -46,14 +36,45 @@ async function requireAuth(req, res, next) {
  * @return {Promise<*>}
  */
 async function requireAdminPasswordSet(req, res, next) {
-  if (!(await getHashedAdminPassword())) {
-    return res.redirect('/setup');
+  try {
+    if (!(await getHashedAdminPassword())) {
+      return res.redirect('/setup');
+    }
+    next();
+  } catch(err) {
+    next(err);
   }
+}
+
+async function mergeConfig(req, res, next) {
+  try {
+    var newConfig = xtend(req.current_config, req.body);
+    for (const key of Object.keys(newConfig)) {
+      config.set(key, newConfig[key]);
+    }
+    await config.save(true);
+
+    if (req.body.LDAP_URL || req.body.PORT || req.body.SERVER_URL) {
+      return restartServer(function () {
+        return res.redirect('/?s=1');
+      });
+    }
+
+    res.redirect('/');
+  } catch(err) {
+    next(err);
+  }
+}
+
+function setCurrentConfig(req, res, next) {
+  req.current_config = config.getAll();
   next();
 }
 
 module.exports = {
   getHashedAdminPassword,
   requireAuth,
-  requireAdminPasswordSet
+  requireAdminPasswordSet,
+  mergeConfig,
+  setCurrentConfig
 };
