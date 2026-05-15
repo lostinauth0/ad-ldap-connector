@@ -46,6 +46,16 @@ async function requireAdminPasswordSet(req, res, next) {
   }
 }
 
+/**
+ * Merges the current config with any variables passed in from a form submission. This is legacy code and it feels
+ * like a lazy nuke-y way to handle form submissions.
+ * TODO: Replace this with more explicit handling of form values from specific forms / views.
+ *
+ * @param req
+ * @param res
+ * @param next
+ * @return {Promise<*>}
+ */
 async function mergeConfig(req, res, next) {
   try {
     var newConfig = xtend(req.current_config, req.body);
@@ -79,9 +89,46 @@ function setCurrentConfig(req, res, next) {
   next();
 }
 
+/**
+ * Extracts any errorMessage passed on from a redirectWithError call.
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+function extractErrorMessage(req, res, next) {
+  if (req.session.errorMessage) {
+    req.errorMessage = req.session.errorMessage;
+    delete req.session.errorMessage;
+  }
+  next();
+}
+
+/**
+ * Injects a `redirectWithError` method into the res object which can be used to both redirect and pass on an error.
+ * This is complimentary to the extractErrorMessage middleware.
+ *
+ * @param req
+ * @param res
+ * @param next
+ */
+function injectRedirectWithError(req, res, next) {
+  res.redirectWithError = ({
+    url = '',
+    errorMessage,
+    anchor
+  }) => {
+    req.session.errorMessage = errorMessage;
+    res.redirect(`/${url}${(anchor ? '#' + anchor : '')}`);
+  };
+  next();
+}
+
 module.exports = {
   requireAuth,
   requireAdminPasswordSet,
   mergeConfig,
-  setCurrentConfig
+  setCurrentConfig,
+  extractErrorMessage,
+  injectRedirectWithError
 };

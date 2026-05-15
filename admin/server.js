@@ -48,7 +48,9 @@ const {
   requireAdminPasswordSet,
   requireAuth,
   mergeConfig,
-  setCurrentConfig
+  setCurrentConfig,
+  extractErrorMessage,
+  injectRedirectWithError
 } = require('./middleware');
 
 const csrfProtection = csrf({cookie: true});
@@ -79,6 +81,8 @@ async function registerRoutes(app) {
     })
   );
 
+  app.use(injectRedirectWithError);
+
   app.get('/setup', csrfProtection, async function (req, res) {
     if (await getHashedAdminPassword()) {
       return res.redirect('/');
@@ -86,13 +90,13 @@ async function registerRoutes(app) {
     res.render('setup', {csrfToken: req.csrfToken()});
   });
 
-  app.get('/login', csrfProtection, requireAdminPasswordSet, function (req, res) {
+  app.get('/login', csrfProtection, requireAdminPasswordSet, extractErrorMessage, function (req, res) {
     if (req.session.authenticated) {
       return res.redirect('/');
     }
     res.render('login', {
       csrfToken: req.csrfToken(),
-      ERROR: req.query.error,
+      ERROR: req.errorMessage,
     });
   });
 
@@ -103,8 +107,7 @@ async function registerRoutes(app) {
     }
     const match = await bcrypt.compare(req.body.password || '', hashedAdminPassword);
     if (!match) {
-      return redirectWithError({
-        res,
+      return res.redirectWithError({
         url: 'login',
         errorMessage: 'Invalid password'
       });
@@ -131,14 +134,14 @@ async function registerRoutes(app) {
   app.use(requireAdminPasswordSet);
   app.use(requireAuth);
 
-  app.get('/', setCurrentConfig, csrfProtection, function (req, res) {
+  app.get('/', setCurrentConfig, csrfProtection, extractErrorMessage, function (req, res) {
     res.render(
       'index',
       xtend(
         req.current_config,
         {
           SUCCESS: req.query && req.query.s === '1',
-          ERROR: req.query.error,
+          ERROR: req.errorMessage,
           LDAP_RESULTS: req.session.LDAP_RESULTS,
         },
         {
@@ -197,8 +200,7 @@ async function registerRoutes(app) {
           next();
         })
         .catch(function (err) {
-          redirectWithError({
-            res,
+          res.redirectWithError({
             errorMessage: err.message
           });
         });
@@ -234,8 +236,7 @@ async function registerRoutes(app) {
     csrfProtection,
     async function (req, res, next) {
       if (!req.body.PROVISIONING_TICKET) {
-        return redirectWithError({
-          res,
+        return res.redirectWithError({
           errorMessage: 'Provisioning ticket URL is required.'
         });
       }
@@ -303,8 +304,7 @@ async function registerRoutes(app) {
         !req.file ||
         req.file.buffer.length === 0
       ) {
-        return redirectWithError({
-          res,
+        return res.redirectWithError({
           errorMessage: 'Upload a valid zip file.',
           anchor: 'export'
         });
@@ -336,8 +336,7 @@ async function registerRoutes(app) {
           });
         }).on('error', err => {
           console.error(err);
-          return redirectWithError({
-            res,
+          return res.redirectWithError({
             errorMessage: 'Upload a valid zip file.',
             anchor: 'export'
           });
@@ -595,16 +594,14 @@ async function registerRoutes(app) {
     const newPasswordConfirm = req.body.confirm_password || '';
 
     if (!passwordStrength.validate(newPassword)) {
-      return redirectWithError({
-        res,
+      return res.redirectWithError({
         errorMessage: passwordStrength.validateToString(newPassword),
         anchor: 'security'
       });
     }
 
     if (newPassword !== newPasswordConfirm) {
-      return redirectWithError({
-        res,
+      return res.redirectWithError({
         errorMessage: 'Passwords do not match.',
         anchor: 'security'
       });
@@ -614,8 +611,7 @@ async function registerRoutes(app) {
       const hashedPassword = await getHashedAdminPassword();
       const match = await bcrypt.compare(currentPassword, hashedPassword || '');
       if (!match) {
-        return redirectWithError({
-          res,
+        return res.redirectWithError({
           errorMessage: 'Current password is incorrect.',
           anchor: 'security'
         });
@@ -625,8 +621,7 @@ async function registerRoutes(app) {
       res.redirect('/?s=1');
     } catch (err) {
       console.error(err);
-      return redirectWithError({
-        res,
+      return res.redirectWithError({
         errorMessage: 'An error occurred while changing the password.',
         anchor: 'security'
       });
@@ -634,17 +629,27 @@ async function registerRoutes(app) {
   });
 }
 
+/**
+ * Registers a final error handler so the server doesn't die on uncaught exceptions.
+ *
+ * @param app
+ * @return {Promise<void>}
+ */
 async function registerErrorHandler(app) {
   app.use((err, req, res, next) => {
     console.error(err.stack);
     const message = err.message || 'Unknown error. Check logs for details.';
-    return redirectWithError({
-      res,
+    return res.redirectWithError({
       errorMessage: message
     });
   });
 }
 
+/**
+ * Moves the admin password setup by the installer from the local file to the secure credential storage.
+ *
+ * @return {Promise<void>}
+ */
 async function consumePendingAdminPassword() {
   const pendingPasswordPath = path.join(__dirname, '.pending-admin-password');
   const setAdminPasswordScriptPath = path.join(__dirname, 'set-admin-password.js');
