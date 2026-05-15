@@ -9,6 +9,50 @@ const expect = require('chai').expect;
 const request = require('supertest');
 const proxyquire = require('proxyquire').noCallThru();
 const bcrypt = require('bcryptjs');
+const expressSession = require('express-session');
+
+// ---------------------------------------------------------------------------
+// Shared session store — lets tests inspect server-side session contents
+// ---------------------------------------------------------------------------
+const MemoryStore = expressSession.MemoryStore;
+const testStore = new MemoryStore();
+
+/**
+ * Parse the session ID from a supertest response's set-cookie header.
+ */
+function parseSid(res) {
+  const raw = (res.headers['set-cookie'] || []).find(c => c.startsWith('connect.sid='));
+  if (!raw) return null;
+  // cookie value is URL-encoded; the session ID is after "s%3A" and before the first "."
+  const val = decodeURIComponent(raw.split(';')[0].split('=')[1]);
+  return val.replace(/^s:/, '').split('.')[0];
+}
+
+/**
+ * Retrieve the session object for a given session ID from the test store.
+ */
+function getSession(sid) {
+  return new Promise((resolve, reject) => {
+    testStore.get(sid, (err, session) => {
+      if (err) return reject(err);
+      resolve(session);
+    });
+  });
+}
+
+async function expectRedirectWithError({
+  res,
+  url = '/',
+  errorMessage
+}) {
+  const sid = parseSid(res);
+  const sessionData = sid ? await getSession(sid) : null;
+
+  const statusCode = res.status || res.statusCode;
+  expect(statusCode).to.equal(302);
+  expect(res.headers.location).to.equal(url);
+  expect(sessionData.errorMessage).to.equal(errorMessage);
+}
 
 const TEST_PASSWORD = 'TestPassword123456!';
 
@@ -39,6 +83,10 @@ function setAdminPassword(password) {
 // App factory — minimal stubbing, real middleware pipeline
 // ---------------------------------------------------------------------------
 function buildApp() {
+  // Wrap express-session to inject testStore so tests can inspect sessions
+  const sessionStub = (opts) => expressSession({ ...opts, store: testStore });
+  sessionStub.MemoryStore = MemoryStore;
+
   return proxyquire('../../admin/server', {
     // Prevent the HTTP server from binding a port during tests
     '../lib/add_certs': { inject: () => {}, injectAsync: () => Promise.resolve() },
@@ -56,7 +104,8 @@ function buildApp() {
     // Replace the OS secure storage with an in-memory store
     // @global ensures the stub is used by admin/middleware.js too
     '../lib/secureStorage': mockSecureStorage,
-    // Everything else (csurf, express-session, bcrypt, EJS …) is real
+    // Inject our testStore so tests can inspect session contents
+    'express-session': sessionStub,
   });
 }
 
@@ -187,7 +236,7 @@ describe('admin server endpoints (integration)', function () {
       expect(res.headers.location).to.equal('/');
     });
 
-    it('re-renders the login form with an error message on wrong password', async function () {
+    it('redirects back to the login form with an error message on wrong password', async function () {
       const agent = request.agent(app);
       const loginPage = await agent.get('/login');
       const csrfToken = extractCsrfToken(loginPage.text);
@@ -197,8 +246,9 @@ describe('admin server endpoints (integration)', function () {
         .type('form')
         .send({ _csrf: csrfToken, password: 'totally-wrong-password' });
 
-      expect(res.status).to.equal(200);
-      expect(res.text).to.include('Invalid password');
+      await expectRedirectWithError({
+        res, url: '/login', errorMessage: 'Invalid password'
+      });
     });
 
     it('rejects the request when the CSRF token is missing', async function () {
@@ -207,8 +257,9 @@ describe('admin server endpoints (integration)', function () {
         .type('form')
         .send({ password: TEST_PASSWORD });
 
-      // csurf responds with 403 when the token is absent
-      expect(res.status).to.equal(403);
+      await expectRedirectWithError({
+        res, errorMessage: 'invalid csrf token'
+      });
     });
 
     it('rejects the request when the CSRF token is invalid', async function () {
@@ -221,7 +272,9 @@ describe('admin server endpoints (integration)', function () {
         .type('form')
         .send({ _csrf: 'not-a-real-token', password: TEST_PASSWORD });
 
-      expect(res.status).to.equal(403);
+      await expectRedirectWithError({
+        res, errorMessage: 'invalid csrf token'
+      });
     });
   });
 
@@ -327,7 +380,9 @@ describe('admin server endpoints (integration)', function () {
 
       it('returns 403 without a CSRF token', async function () {
         const res = await agent.post('/logs/clear').type('form').send({});
-        expect(res.status).to.equal(403);
+        await expectRedirectWithError({
+          res, errorMessage: 'invalid csrf token'
+        });
       });
     });
 
@@ -375,8 +430,9 @@ describe('admin server endpoints (integration)', function () {
             new_password: 'short',
             confirm_password: 'short',
           });
-        expect(res.status).to.equal(302);
-        expect(res.headers.location).to.include('/#security?error=');
+        await expectRedirectWithError({
+          res, errorMessage: 'Password must be at least 15 characters long.', url: '/#security'
+        });
       });
 
       it('redirects with an error when new passwords do not match', async function () {
@@ -390,8 +446,9 @@ describe('admin server endpoints (integration)', function () {
             new_password: 'NewSecurePassword123!',
             confirm_password: 'DifferentPassword456!',
           });
-        expect(res.status).to.equal(302);
-        expect(res.headers.location).to.include('/#security?error=');
+        await expectRedirectWithError({
+          res, errorMessage: 'Passwords do not match.', url: '/#security'
+        });
       });
 
       it('redirects with an error when the current password is incorrect', async function () {
@@ -405,8 +462,9 @@ describe('admin server endpoints (integration)', function () {
             new_password: 'NewSecurePassword123!',
             confirm_password: 'NewSecurePassword123!',
           });
-        expect(res.status).to.equal(302);
-        expect(res.headers.location).to.include('/#security?error=');
+        await expectRedirectWithError({
+          res, errorMessage: 'Current password is incorrect.', url: '/#security'
+        });
       });
 
       it('redirects to /?s=1 on a successful password change', async function () {
@@ -433,7 +491,9 @@ describe('admin server endpoints (integration)', function () {
             new_password: 'NewSecurePassword123!',
             confirm_password: 'NewSecurePassword123!',
           });
-        expect(res.status).to.equal(403);
+        await expectRedirectWithError({
+          res, errorMessage: 'invalid csrf token'
+        });
       });
     });
   });
