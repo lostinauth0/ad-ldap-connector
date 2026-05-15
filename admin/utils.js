@@ -96,21 +96,9 @@ async function getHashedAdminPassword() {
   }
 }
 
-function redirectWithError({
-  req,
-  res,
-  url = '',
-  errorMessage,
-  anchor
-}) {
-  req.session.errorMessage = errorMessage;
-  res.redirect(`/${url}?error=${encodeURIComponent(errorMessage)}${(anchor ? '#' + anchor : '')}`);
-}
-
 module.exports = {
   restartServer,
   run,
   detectLdapSettings,
-  getHashedAdminPassword,
-  redirectWithError
+  getHashedAdminPassword
 };

@@ -30,7 +30,7 @@ const secureStorage = require('../lib/secureStorage');
 const certificates = require('../lib/certificates');
 const { loadProvisioningTicket } = require('../lib/provisioningTicket');
 const adLdapSettings = require('../lib/adLdapSettings');
-const { run, restartServer, getHashedAdminPassword, detectLdapSettings, redirectWithError } = require('./utils');
+const { run, restartServer, getHashedAdminPassword, detectLdapSettings } = require('./utils');
 
 const BCRYPT_SALT_ROUNDS = 12;
 const SERVER_PORT = 8357;

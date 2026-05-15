@@ -7,7 +7,6 @@ const logger = require('morgan');
 const passport = require('passport');
 
 require('./eventlog');
-require('./lib/add_certs');
 require('./lib/setupProxy');
 const exit = require('./lib/exit');
 const config = require('./lib/config');
