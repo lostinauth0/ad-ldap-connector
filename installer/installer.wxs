@@ -51,6 +51,7 @@
       <Directory Id='ProgramFilesFolder' Name='PFiles'>
         <Directory Id='Auth0_Folder' Name='Auth0'>
           <Directory Id='INSTALLDIR' Name='AD LDAP Connector'>
+              <Directory Id="ADMINFOLDER" Name="admin" />
           </Directory>
         </Directory>
       </Directory>
@@ -72,8 +73,14 @@
     <InstallExecuteSequence>
       <Custom Action='RegisterAdminService'
               Before='StartServices'>NOT Installed</Custom>
+      <Custom Action='ConfigureAdminServiceStdout'
+              After='RegisterAdminService'>NOT Installed</Custom>
+      <Custom Action='ConfigureAdminServiceStderr'
+              After='ConfigureAdminServiceStdout'>NOT Installed</Custom>
       <Custom Action='RegisterConnectorService'
               Before='StartServices'>NOT Installed</Custom>
+      <Custom Action="WriteAdminPasswordFile"
+              After="InstallFiles"><![CDATA[ADMIN_PASSWORD <> ""]]></Custom>
       <Custom Action="LaunchBrowser"
               OnExit="success">NOT Installed</Custom>
       <Custom Action="PreventDowngrading"
@@ -88,12 +95,12 @@
         <File Id="node" KeyPath="yes" Source="$(var.NodeBin)" />
       </Component>
       <Component Id="nssm_component" Guid="{07D39AAA-CBB2-4F3F-BC22-EC7AE4963FFF}" Directory="INSTALLDIR">
-        <File Id="nssm" KeyPath="yes" Source="C:\Program Files (x86)\nssm-2.24\win32\nssm.exe" />
+        <File Id="nssm" KeyPath="yes" Source="$(var.NssmBin)" />
         <ServiceControl Id="ControlAdminService"
                  Name="Auth0 ADLDAP Admin"
                  Remove="uninstall"
                  Start="install"
-                 Stop="uninstall" />
+                 Stop="both" />
 
         <ServiceControl Id="ControlConnectorService"
                  Name="Auth0 ADLDAP"
@@ -105,6 +112,37 @@
 
     <Property Id="WIXUI_TICKETURL" Secure="yes" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
+
+    <Property Id="ADMIN_PASSWORD" Hidden="yes" Secure="yes" />
+    <Property Id="ADMIN_PASSWORD_CONFIRM" Hidden="yes" Secure="yes" />
+    <Property Id="ADMIN_PASSWORD_ERROR" Hidden="yes" Secure="yes" />
+
+    <CustomAction Id="ValidateAdminPassword" Script="jscript" Return="ignore"><![CDATA[
+      try {
+        var password = Session.Property("ADMIN_PASSWORD");
+        var confirm  = Session.Property("ADMIN_PASSWORD_CONFIRM");
+        var result = "";
+        if (!password) {
+          result = "Password is required.";
+        } else if (password.length < 15) {
+          result = "Password must be at least 15 characters long.";
+        } else if (password !== confirm) {
+          result = "Passwords do not match.";
+        }
+        Session.Property("ADMIN_PASSWORD_ERROR") = result;
+      } catch (e) {
+        Session.Property("ADMIN_PASSWORD_ERROR") = "Validation error: " + (e.description || e.message || String(e));
+      }
+    ]]></CustomAction>
+
+    <CustomAction Id="WriteAdminPasswordFile"
+      Directory="ADMINFOLDER"
+      Execute="commit"
+      Impersonate="no"
+      Return="check"
+      ExeCommand="&quot;[#node]&quot; set-admin-password.js &quot;[ADMIN_PASSWORD]&quot;"
+      HideTarget="yes"
+    />
 
     <UIRef Id="WixUI" />
 

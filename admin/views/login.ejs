@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Auth0 | AD LDAP Connector Login</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="shortcut icon" href="https://auth0.com/auth0-styleguide/img/favicon.png">
+  <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Open+Sans:300,400,600,700,800">
+  <link rel="stylesheet" type="text/css" href="/main.min.css">
+  <link rel="stylesheet" type="text/css" href="/custom.css">
+</head>
+<body>
+  <div id="header">
+    <h1>Auth0</h1>
+  </div>
+  <div class="wrapper">
+    <div id="content" style="margin-left: 0;">
+      <section id="configuration-section" class="content-page current">
+        <div id="content-header">
+          <h1>AD LDAP Connector Configuration</h1>
+        </div>
+        <div class="container-fluid flat">
+          <% if (locals.ERROR) { %>
+          <div class="alert alert-error"><%= locals.ERROR %></div>
+          <% } %>
+          <div class="widget-box">
+            <div class="widget-title">
+              <h5>Admin Login</h5>
+            </div>
+            <div class="widget-content">
+              <form method="POST" action="/login" class="form-horizontal">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div class="control-group">
+                  <label class="control-label" for="password">Password</label>
+                  <div class="controls">
+                    <input type="password" name="password" id="password" autofocus required>
+                  </div>
+                </div>
+                <div class="control-group">
+                  <div class="controls">
+                    <button type="submit" class="btn btn-primary">Login</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script src="/jquery.min.js"></script>
+  <script src="/bootstrap.min.js"></script>
+</body>
+</html>

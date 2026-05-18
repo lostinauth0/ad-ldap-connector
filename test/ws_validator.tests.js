@@ -47,13 +47,12 @@ class MockWebSocket {
 
 class MockUsers {}
 
-const mockNconf = {
+const mockConfig = {
   values: {},
-  get: (key) => mockNconf.values[key],
+  get: (key) => mockConfig.values[key],
   set: (key, value) => {
-    mockNconf.values[key] = value;
+    mockConfig.values[key] = value;
   },
-  '@global': true,
 }
 
 const cert = `-----BEGIN CERTIFICATE-----
@@ -106,18 +105,18 @@ xg2fno4Ifa9Qc7w5ywI7LpbyRXNfAbvcgUWlCGDbekS+SzgosEc=
 `;
 
 describe('ws_validator', () => {
-  mockNconf.set('LDAP_URL', 'ldap://ds.example.com:389/dc=example,dc=com');
-  mockNconf.set('LDAP_BIND_PASSWORD', 'abc123');
-  mockNconf.set('AUTH_CERT_KEY', key);
-  mockNconf.set('AUTH_CERT', cert);
-  mockNconf.set('AD_HUB', 'http://test.io');
-  mockNconf.set('CONNECTION', 'test-ad');
-  mockNconf.set('REALM', 'urn:auth0:example');
-  mockNconf.set('WS_RECONNECT_INTERVAL_MS', 1000);
+  mockConfig.set('LDAP_URL', 'ldap://ds.example.com:389/dc=example,dc=com');
+  mockConfig.set('LDAP_BIND_PASSWORD', 'abc123');
+  mockConfig.set('AUTH_CERT_KEY', key);
+  mockConfig.set('AUTH_CERT', cert);
+  mockConfig.set('AD_HUB', 'http://test.io');
+  mockConfig.set('CONNECTION', 'test-ad');
+  mockConfig.set('REALM', 'urn:auth0:example');
+  mockConfig.set('WS_RECONNECT_INTERVAL_MS', 1000);
 
   const wsValidator = proxyquire('../ws_validator', {
     'ws': MockWebSocket,
-    'nconf': mockNconf,
+    './lib/config': mockConfig,
     './lib/users': MockUsers,
   });
   

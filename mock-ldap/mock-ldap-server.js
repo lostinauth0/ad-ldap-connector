@@ -1,20 +1,20 @@
 const ldap = require('ldapjs');
-const db = require('./test/resources/mock_ldap_data.json');
-const nconf = require('nconf');
+const db = require('./mock_ldap_data.json');
+const config = require('../lib/config');
 const BASE_DN = 'dc=example,dc=org';
 const LDAP_SERVER_PORT = 4444;
 
-nconf.set('LDAP_URL', `ldap://0.0.0.0:${LDAP_SERVER_PORT}`);
-nconf.set('LDAP_BASE', 'dc=example,dc=org');
-nconf.set('LDAP_BIND_USER', 'cn=admin,dc=example,dc=org');
-nconf.set('LDAP_BIND_PASSWORD', 'admin');
-nconf.set('LDAP_USER_BY_NAME', '(&(objectClass=inetOrgPerson)(uid={0}))');
-nconf.set(
+config.set('LDAP_URL', `ldap://0.0.0.0:${LDAP_SERVER_PORT}`);
+config.set('LDAP_BASE', 'dc=example,dc=org');
+config.set('LDAP_BIND_USER', 'cn=admin,dc=example,dc=org');
+config.set('LDAP_BIND_PASSWORD', 'admin');
+config.set('LDAP_USER_BY_NAME', '(&(objectClass=inetOrgPerson)(uid={0}))');
+config.set(
   'LDAP_SEARCH_QUERY',
   '(&(objectClass=inetOrgPerson)(|(cn={0})(givenName={0})(sn={0})(uid={0})))'
 );
-nconf.set('LDAP_SEARCH_ALL_QUERY', '(objectClass=inetOrgPerson)');
-nconf.set('LDAP_SEARCH_GROUPS', '(member={0})');
+config.set('LDAP_SEARCH_ALL_QUERY', '(objectClass=inetOrgPerson)');
+config.set('LDAP_SEARCH_GROUPS', '(member={0})');
 
 // This is an in-memory LDAP server used to run unit/integration tests
 // It is based on the example of the ldapjs library: http://ldapjs.org/examples.html
@@ -88,6 +88,10 @@ server.search(BASE_DN, function (req, res, next) {
   return next();
 });
 
-server.listen(LDAP_SERVER_PORT, () => {
-  console.log(`LDAP server running on ${LDAP_SERVER_PORT}`);
-});
+if (require.main === module) {
+  server.listen(LDAP_SERVER_PORT, () => {
+    console.log(`LDAP server running on ${LDAP_SERVER_PORT}`);
+  });
+}
+
+module.exports = server;

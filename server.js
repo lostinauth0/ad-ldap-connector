@@ -1,9 +1,17 @@
-require('./lib/initConf');
 require('colors');
+const crypto = require('crypto');
+const process = require('node:process');
+const express  = require('express');
+const bodyParser = require('body-parser');
+const logger = require('morgan');
+const passport = require('passport');
+
 require('./eventlog');
-require('./lib/add_certs');
 require('./lib/setupProxy');
-var exit = require('./lib/exit');
+const exit = require('./lib/exit');
+const config = require('./lib/config');
+const certificates = require('./lib/certificates');
+const endpoints = require('./endpoints');
 
 function end () {
   console.log('Got SIGTERM, exiting now.');
@@ -22,12 +30,12 @@ process.on('uncaughtException', function(err) {
   .once('SIGINT', end);
 
 
-var nconf = require('nconf');
 var ws_client;
+const connectorSetup = require('./connector-setup');
+const session = require('express-session');
+const secureStorage = require('./lib/secureStorage');
 
-var connectorSetup = require('./connector-setup');
-
-let maxHeaderSize = Number(nconf.get('MAX_HEADER_SIZE'));
+let maxHeaderSize = Number(config.get('MAX_HEADER_SIZE'));
 maxHeaderSize = maxHeaderSize > 0 ? maxHeaderSize : 16834;
 
 console.log('');
@@ -36,25 +44,31 @@ console.log('');
 console.log('======================== STARTING AD-LDAP CONNECTOR ========================');
 console.log('Maximum header size = ' + maxHeaderSize);
 
-connectorSetup.run(__dirname, function(err) {
-  if(err) {
+(async () => {
+  try {
+    await config.initialize();
+    await certificates.initialize();
+    await connectorSetup.run();
+  } catch (err) {
     console.log(err.message);
     return exit(2);
   }
 
-  if(!nconf.get('LDAP_URL')) {
+  if(!config.get('LDAP_URL')) {
     console.error('edit config.json and add your LDAP URL');
     return exit(1);
   }
 
-  if (!nconf.get('LDAP_BIND_USER') || !nconf.get('LDAP_BIND_CREDENTIALS')) {
-    if (!nconf.get('ANONYMOUS_SEARCH_ENABLED')){
-      console.error('Anonymous LDAP search is not enabled. Please edit config.json to add LDAP_BIND_USER');
-      return exit(1);
-    }
-    else{
-      console.log('Anonymous LDAP search is enabled. LDAP_BIND_USER is not required');
-    }
+  if (!config.get('ANONYMOUS_SEARCH_ENABLED') && !config.get('LDAP_BIND_USER')) {
+    console.error('Anonymous LDAP search is not enabled. Please edit config.json to add LDAP_BIND_USER');
+    return exit(1);
+  }
+
+  try {
+    await require('./lib/ldap').initialize();
+  } catch (e) {
+    console.error(e.message);
+    return exit(1);
   }
 
   require('./lib/clock_skew_detector');
@@ -62,19 +76,13 @@ connectorSetup.run(__dirname, function(err) {
   var latency_test = require('./latency_test');
   latency_test.run_many(10);
 
-  if (!nconf.get('KERBEROS_AUTH') && !nconf.get('CLIENT_CERT_AUTH')) {
+  if (!config.get('KERBEROS_AUTH') && !config.get('CLIENT_CERT_AUTH')) {
+    console.error('Neither KERBEROS_AUTH nor CLIENT_CERT_AUTH is enabled. Please edit config.json to enable at least one authentication method.');
     return;
   }
 
-  var express  = require('express');
-  var bodyParser = require('body-parser');
-  var cookieParser = require('cookie-parser');
-  var logger = require('morgan');
-  var passport = require('passport');
-
   require('./lib/setupPassport');
 
-  var cookieSessions = require('cookie-sessions');
   var app = express();
 
   // configure the webserver
@@ -83,58 +91,67 @@ connectorSetup.run(__dirname, function(err) {
 
   app.use(express.static(__dirname + '/public'));
   app.use(logger('combined'));
-  if(nconf.get('KERBEROS_DEBUG_USER')) {
+  if(config.get('KERBEROS_DEBUG_USER')) {
     app.use((req, res, next) => {
-      req.headers['x-forwarded-user'] = nconf.get('KERBEROS_DEBUG_USER');
+      req.headers['x-forwarded-user'] = config.get('KERBEROS_DEBUG_USER');
       next();
     });
   }
-  app.use(cookieParser());
   app.use(bodyParser.json());
   app.use(bodyParser.urlencoded({extended:true}));
-  app.use(cookieSessions({
-    name:    'auth0-ad-conn',
-    secret:   nconf.get('SESSION_SECRET')}));
+
+  let sessionSecret = await secureStorage.get(secureStorage.keys.CONNECTOR_SESSION_SECRET);
+  if (!sessionSecret) {
+    sessionSecret = crypto.randomBytes(32).toString('hex');
+    await secureStorage.store(secureStorage.keys.CONNECTOR_SESSION_SECRET, sessionSecret);
+  }
+  app.use(session({
+    secret: sessionSecret,
+    saveUninitialized: false,
+    resave: false,
+  }));
 
   app.use(passport.initialize());
 
-  require('./endpoints').install(app);
+  await endpoints.install(app);
+
+  await config.save();
 
   var options = {
-    port: nconf.get('PORT'),
-    test_user: nconf.get('KERBEROS_DEBUG_USER'),
+    port: config.get('PORT'),
+    test_user: config.get('KERBEROS_DEBUG_USER'),
     maxHeaderSize,
   };
 
   // client certificate-based authentication
-  if (nconf.get('CLIENT_CERT_AUTH')) {
+  if (config.get('CLIENT_CERT_AUTH')) {
     console.log('Using client certificate-based authentication');
 
     // SSL settings
-    options.ca = nconf.get('CA_CERT');
-    options.pfx = Buffer.from(nconf.get('SSL_PFX'), 'base64');
-    options.passphrase = nconf.get('SSL_KEY_PASSWORD');
+    options.ca = config.get('CA_CERT');
+    options.pfx = Buffer.from(config.get('SSL_PFX'), 'base64');
+    options.passphrase = config.get('SSL_KEY_PASSWORD');
     options.requestCert = true;
 
-    if (!nconf.get('KERBEROS_AUTH')) {
+    if (!config.get('KERBEROS_AUTH')) {
       var https = require('https'); // use https server
       https.createServer(options, app).listen(options.port);
     }
   }
 
   // kerberos authentication
-  if (nconf.get('KERBEROS_AUTH')) {
+  if (config.get('KERBEROS_AUTH')) {
     console.log('Using kerberos authentication');
 
     if (process.platform === 'win32') {
       var KerberosServer = require('kerberos-server');
       var kerberosServer = new KerberosServer(app, options);
       kerberosServer.listen(options.port)
-                    .on('error', function (err) {
-                      console.error(err.message);
-                      return process.exit(1);
-                    });
-    } else if (nconf.get('WITH_KERBEROS_PROXY_FRONTEND') || nconf.get('KERBEROS_DEBUG_USER')) {
+        .on('error', function (err) {
+          console.error(err.message);
+          return process.exit(1);
+        });
+    } else if (config.get('WITH_KERBEROS_PROXY_FRONTEND') || config.get('KERBEROS_DEBUG_USER')) {
       var http = require('http');
       http.createServer({ maxHeaderSize }, app).listen(options.port);
     } else {
@@ -143,5 +160,5 @@ connectorSetup.run(__dirname, function(err) {
 
   }
 
-  console.log('listening on port: ' + nconf.get('PORT'));
-});
+  console.log('listening on port: ' + config.get('PORT'));
+})();

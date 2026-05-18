@@ -1,49 +1,47 @@
-var WebSocket = require('ws');
-var EventEmitter = require('events').EventEmitter;
-var exit = require('./lib/exit');
-var jwt = require('jsonwebtoken');
-var nconf = require('nconf');
-var fs = require('fs');
-var Users = require('./lib/users');
-var users = new Users();
-var async = require('async');
-var cb = require('cb');
-var ms = require('ms');
+const WebSocket = require('ws');
+const EventEmitter = require('events').EventEmitter;
+const async = require('async');
+const cb = require('cb');
+const ms = require('ms');
 
-var cert = {
-  key: nconf.get('AUTH_CERT_KEY') || fs.readFileSync(__dirname + '/certs/cert.key'),
-  cert: nconf.get('AUTH_CERT') || fs.readFileSync(__dirname + '/certs/cert.pem')
-};
+const exit = require('./lib/exit');
+const jwt = require('jsonwebtoken');
+const config = require('./lib/config');
+const secureStorage = require('./lib/secureStorage');
+const Users = require('./lib/users');
+const users = new Users();
 
-var authenticate_when_password_expired = nconf.get('ALLOW_PASSWORD_EXPIRED');
-var authenticate_when_password_change_required = nconf.get('ALLOW_PASSWORD_CHANGE_REQUIRED');
+const authenticate_when_password_expired = config.get('ALLOW_PASSWORD_EXPIRED');
+const authenticate_when_password_change_required = config.get('ALLOW_PASSWORD_CHANGE_REQUIRED');
 
-var socket_server_address = nconf.get('AD_HUB').replace(/^http/i, 'ws');
+const socket_server_address = config.get('AD_HUB').replace(/^http/i, 'ws');
 
-var AccountDisabled = require('./lib/errors/AccountDisabled');
-var AccountExpired = require('./lib/errors/AccountExpired');
-var AccountLocked = require('./lib/errors/AccountLocked');
-var PasswordChangeRequired = require('./lib/errors/PasswordChangeRequired');
-var PasswordExpired = require('./lib/errors/PasswordExpired');
-var WrongPassword = require('./lib/errors/WrongPassword');
-var WrongUsername = require('./lib/errors/WrongUsername');
-var InsufficientAccessRightsError = require('./lib/errors/InsufficientAccessRightsError');
-var PasswordComplexityError = require('./lib/errors/PasswordComplexityError');
+const AccountDisabled = require('./lib/errors/AccountDisabled');
+const AccountExpired = require('./lib/errors/AccountExpired');
+const AccountLocked = require('./lib/errors/AccountLocked');
+const PasswordChangeRequired = require('./lib/errors/PasswordChangeRequired');
+const PasswordExpired = require('./lib/errors/PasswordExpired');
+const WrongPassword = require('./lib/errors/WrongPassword');
+const WrongUsername = require('./lib/errors/WrongUsername');
+const InsufficientAccessRightsError = require('./lib/errors/InsufficientAccessRightsError');
+const PasswordComplexityError = require('./lib/errors/PasswordComplexityError');
+const certificates = require('./lib/certificates');
 var ws;
 
-var emitter = new EventEmitter();
+const emitter = new EventEmitter();
 emitter.close = () => ws && ws.close();
 
 // reconnection interval
-const reconnectionInterval = nconf.get('WS_RECONNECT_INTERVAL_MS') || 10000;
+const reconnectionInterval = config.get('WS_RECONNECT_INTERVAL_MS') || 10000;
 
 // used by timer, determine if socket has to be rebuilt or not
 let openedSocket = false;
 
-function setupWebsocket() {
+async function setupWebsocket() {
+  const authCertKey = certificates.getPrivateKey();
   ws = new WebSocket(socket_server_address);
 
-  return new Promise((resolve, reject) => {   
+  return new Promise((resolve, reject) => {
     ws.sendEvent = function (name, payload) {
       this.send(JSON.stringify({
         n: name,
@@ -142,7 +140,7 @@ function setupWebsocket() {
         openedSocket = false;
       }
     }).on('authenticate_user', function (msg) {
-      jwt.verify(msg.jwt, nconf.get('TENANT_SIGNING_KEY'), function (err, payload) {
+      jwt.verify(msg.jwt, config.get('TENANT_SIGNING_KEY'), function (err, payload) {
         if (err) {
           console.error('Unauthorized attemp of authentication.');
           return;
@@ -247,7 +245,7 @@ function setupWebsocket() {
         });
       });
     }).on('search_users', function (msg) {
-      jwt.verify(msg.jwt, nconf.get('TENANT_SIGNING_KEY'), function (err, payload) {
+      jwt.verify(msg.jwt, config.get('TENANT_SIGNING_KEY'), function (err, payload) {
         if (err) {
           console.error('Unauthorized attemp of search_users.');
           return;
@@ -271,7 +269,7 @@ function setupWebsocket() {
         });
       });
     }).on('list_groups', function(msg) {
-      jwt.verify(msg.jwt, nconf.get('TENANT_SIGNING_KEY'), function(err, payload) {
+      jwt.verify(msg.jwt, config.get('TENANT_SIGNING_KEY'), function(err, payload) {
         if (err) {
           console.error('Unauthorized attempt of list_groups');
           return;
@@ -296,9 +294,9 @@ function setupWebsocket() {
     });
 
     // Listen only for change_password event when write back is enabled.
-    if (nconf.get('ENABLE_WRITE_BACK')) {
+    if (config.get('ENABLE_WRITE_BACK')) {
       ws.on('change_password', function (command) {
-        jwt.verify(command.jwt, nconf.get('TENANT_SIGNING_KEY'), function (err, payload) {
+        jwt.verify(command.jwt, config.get('TENANT_SIGNING_KEY'), function (err, payload) {
           if (err) {
             console.error('Unauthorized change_password attempt');
             return;
@@ -347,18 +345,18 @@ function setupWebsocket() {
     }
 
     function authenticate_connector() {
-      var token = jwt.sign({}, cert.key, {
+      var token = jwt.sign({}, authCertKey, {
         algorithm: 'RS256',
         expiresIn: '1m',
-        issuer: nconf.get('CONNECTION'),
-        audience: nconf.get('REALM')
+        issuer: config.get('CONNECTION'),
+        audience: config.get('REALM')
       });
 
       ws.sendEvent('authenticate', {
         jwt: token
       });
     };
-  })
+  });
 }
 
 async function reconnect() {

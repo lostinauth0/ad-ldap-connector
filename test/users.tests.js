@@ -1,7 +1,4 @@
-require('../lib/initConf');
-//process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
-
-var nconf = require('nconf');
+const config = require('../lib/config');
 var expect = require('chai').expect;
 var Users = require('../lib/users');
 var crypto = require('../lib/crypto');
@@ -22,10 +19,10 @@ describe.skip('users', function () {
   var users;
   // Allow the tests to use ldaps.
   before(function (done) {
-    password = nconf.get('LDAP_BIND_PASSWORD') || crypto.decrypt(nconf.get('LDAP_BIND_CREDENTIALS'));
-    jane_password = nconf.get('JANE_PASSWORD');
+    password = config.get('LDAP_BIND_PASSWORD') || crypto.decrypt(config.get('LDAP_BIND_CREDENTIALS'));
+    jane_password = config.get('JANE_PASSWORD');
 
-    if (nconf.get('LDAP_URL').toLowerCase().substr(0, 5) === 'ldaps') {
+    if (config.get('LDAP_URL').toLowerCase().substr(0, 5) === 'ldaps') {
       cas.inject(function (err) {
         console.log('Using LDAPs');
         users = new Users();
@@ -122,12 +119,12 @@ describe.skip('users', function () {
     before(function () { users._groupsCache.reset(); });
 
     before(function () {
-      saveValue = nconf.get('GROUP_PROPERTIES');
-      nconf.set('GROUP_PROPERTIES', ['cn', 'objectGUID']);
+      saveValue = config.get('GROUP_PROPERTIES');
+      config.set('GROUP_PROPERTIES', ['cn', 'objectGUID']);
     });
 
     after(function() {
-      nconf.set('GROUP_PROPERTIES', saveValue);
+      config.set('GROUP_PROPERTIES', saveValue);
     });
 
     before(function (done) {
@@ -211,7 +208,7 @@ describe.skip('users', function () {
   });
 
   //this test does not work with ldap:
-  const describeOrSkipChangePassword = nconf.get('LDAP_URL') && nconf.get('LDAP_URL').startsWith('ldaps') ?
+  const describeOrSkipChangePassword = config.get('LDAP_URL') && config.get('LDAP_URL').startsWith('ldaps') ?
     describe :
     describe.skip;
 
@@ -281,8 +278,8 @@ describe.skip('users', function () {
     before(function (done) {
       // We override the group query to prevent the tests from breaking if new
       // custom groups are added to the test environment.
-      saveQuery = nconf.get('LDAP_SEARCH_LIST_GROUPS_QUERY');
-      nconf.set('LDAP_SEARCH_LIST_GROUPS_QUERY', '(&(isCriticalSystemObject=TRUE)(objectCategory=group))');
+      saveQuery = config.get('LDAP_SEARCH_LIST_GROUPS_QUERY');
+      config.set('LDAP_SEARCH_LIST_GROUPS_QUERY', '(&(isCriticalSystemObject=TRUE)(objectCategory=group))');
       users.listGroups('john', function(err, res) {
         error = err;
         response = res;
@@ -291,7 +288,7 @@ describe.skip('users', function () {
     });
 
     after(function() {
-      nconf.set('LDAP_SEARCH_LIST_GROUPS_QUERY', saveQuery);
+      config.set('LDAP_SEARCH_LIST_GROUPS_QUERY', saveQuery);
     });
 
     it('should return the groups', function() {
@@ -342,8 +339,8 @@ describe.skip('users', function () {
     var saveOmitGroups;
 
     before(function (done) {
-      saveOmitGroups = nconf.get('LDAP_SEARCH_RESULTS_OMIT_GROUPS', false);
-      nconf.set('LDAP_SEARCH_RESULTS_OMIT_GROUPS', false);
+      saveOmitGroups = config.get('LDAP_SEARCH_RESULTS_OMIT_GROUPS', false);
+      config.set('LDAP_SEARCH_RESULTS_OMIT_GROUPS', false);
       var users = new Users(true);
       users.list('john', function(err, res) {
         error = err;
@@ -353,7 +350,7 @@ describe.skip('users', function () {
     });
 
     after(() => {
-      nconf.set('LDAP_SEARCH_RESULTS_OMIT_GROUPS', saveOmitGroups);
+      config.set('LDAP_SEARCH_RESULTS_OMIT_GROUPS', saveOmitGroups);
     });
 
     it('should return the groups', function() {
@@ -374,10 +371,10 @@ describe.skip('users', function () {
     var saveValue;
 
     before(function (done) {
-      saveQuery = nconf.get('LDAP_SEARCH_LIST_GROUPS_QUERY');
-      saveValue = nconf.get('GROUP_PROPERTIES');
-      nconf.set('LDAP_SEARCH_LIST_GROUPS_QUERY', '(&(isCriticalSystemObject=TRUE)(objectCategory=group))');
-      nconf.set('GROUP_PROPERTIES', ['cn', 'objectGUID']);
+      saveQuery = config.get('LDAP_SEARCH_LIST_GROUPS_QUERY');
+      saveValue = config.get('GROUP_PROPERTIES');
+      config.set('LDAP_SEARCH_LIST_GROUPS_QUERY', '(&(isCriticalSystemObject=TRUE)(objectCategory=group))');
+      config.set('GROUP_PROPERTIES', ['cn', 'objectGUID']);
       users.listGroups('john', function(err, res) {
         error = err;
         response = res;
@@ -386,8 +383,8 @@ describe.skip('users', function () {
     });
 
     after(function() {
-      nconf.set('LDAP_SEARCH_LIST_GROUPS_QUERY', saveQuery);
-      nconf.set('GROUP_PROPERTIES', saveValue);
+      config.set('LDAP_SEARCH_LIST_GROUPS_QUERY', saveQuery);
+      config.set('GROUP_PROPERTIES', saveValue);
     });
 
     it('should return the groups with extended properties', function() {

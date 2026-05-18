@@ -3,7 +3,6 @@ var url = require('url');
 var net = require('net');
 var WebSocket = require('ws');
 var _ = require('lodash');
-var nconf = require('nconf');
 var https = require('https');
 
 function try_tcp(options, callback) {

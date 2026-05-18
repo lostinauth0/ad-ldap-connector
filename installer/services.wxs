@@ -4,19 +4,35 @@
   <Fragment>
     <CustomAction
       Id='RegisterAdminService'
-      Impersonate="no"  
-      Execute="deferred" 
+      Impersonate="no"
+      Execute="deferred"
       FileKey='nssm'
       ExeCommand='install "Auth0 ADLDAP Admin" "[INSTALLDIR]\node.exe" "\"[INSTALLDIR]\admin\server.js\""'
-      Return='asyncWait' />
+      Return='check' />
 
     <CustomAction
       Id='RegisterConnectorService'
-      Impersonate="no"  
-      Execute="deferred" 
+      Impersonate="no"
+      Execute="deferred"
       FileKey='nssm'
       ExeCommand='install "Auth0 ADLDAP" "[INSTALLDIR]\node.exe" "\"[INSTALLDIR]\server.js\""'
       Return='asyncWait' />
+
+    <CustomAction
+      Id='ConfigureAdminServiceStdout'
+      Impersonate="no"
+      Execute="deferred"
+      FileKey='nssm'
+      ExeCommand='set "Auth0 ADLDAP Admin" AppStdout "[INSTALLDIR]admin-service.log"'
+      Return='check' />
+
+    <CustomAction
+      Id='ConfigureAdminServiceStderr'
+      Impersonate="no"
+      Execute="deferred"
+      FileKey='nssm'
+      ExeCommand='set "Auth0 ADLDAP Admin" AppStderr "[INSTALLDIR]admin-service.log"'
+      Return='check' />
 
   </Fragment>
 </Wix>
