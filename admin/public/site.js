@@ -96,7 +96,7 @@
         .html('<div class="alert alert-success"><button type="button" class="close" data-dismiss="alert">&times;</button>The profile mapper script has been saved.</div>');
     }).fail(function(err) {
       $('#profile-mapper-alerts')
-        .html('<div class="alert alert-error"><button type="button" class="close" data-dismiss="alert">&times;</button>Error saving the profile mapper script. Error: ' + err.statusText + '</div>');
+        .html('<div class="alert alert-error"><button type="button" class="close" data-dismiss="alert">&times;</button>Error saving the profile mapper script. Error: ' + sanitizeHtml(err.statusText) + '</div>');
     });
   });
 
@@ -122,6 +122,10 @@
     setTimeout(function() {
       window.scrollTo(0, document.body.scrollHeight);
     }, 10);
+  }
+
+  function sanitizeHtml(data) {
+    return DOMPurify.sanitize(data, { ALLOWED_TAGS: ['#text'] });
   }
 
   $('.logs-read').click(function(e) {
@@ -179,7 +183,7 @@
         btn.button('reset');
 
         $('#user-by-login-alerts')
-          .html('<div class="alert alert-error"><button type="button" class="close" data-dismiss="alert">&times;</button>Error searching for user. Error: ' + err.statusText + '</div>');
+          .html('<div class="alert alert-error"><button type="button" class="close" data-dismiss="alert">&times;</button>Error searching for user. Error: ' + sanitizeHtml(err.statusText) + '</div>');
       });
   });
 
@@ -203,7 +207,7 @@
         btn.button('reset');
 
         $('#users-search-alerts')
-          .html('<div class="alert alert-error"><button type="button" class="close" data-dismiss="alert">&times;</button>Error searching for users. Error: ' + err.statusText + '</div>');
+          .html('<div class="alert alert-error"><button type="button" class="close" data-dismiss="alert">&times;</button>Error searching for users. Error: ' + sanitizeHtml(err.statusText) + '</div>');
       });
   });
 
@@ -218,8 +222,7 @@
 
       $('#troubleshoot-progress').hide();
       $('#troubleshoot-output').show();
-      const cleanedData = DOMPurify.sanitize(data, { ALLOWED_TAGS: ['#text'] });
-      $('#troubleshoot-output').html(cleanedData
+      $('#troubleshoot-output').html(sanitizeHtml(data)
         .replace(/\info\:/g, '<span class="troubleshoot-info">info</span>:')
         .replace(/\warn\:/g, '<span class="troubleshoot-warning">warn</span>:')
         .replace(/\error\:/g, '<span class="troubleshoot-error">error</span>:')
@@ -256,8 +259,7 @@
   function getUpdaterLogs() {
     $.get('/updater/logs?_=' + new Date().getTime(), function(data) {
       if (data && data.length > 0) {
-        const cleanedData = DOMPurify.sanitize(data, { ALLOWED_TAGS: ['#text'] });
-        $('#update-logs').html(cleanedData
+        $('#update-logs').html(sanitizeHtml(data)
           .replace(/\DEBUG\:/g, '<span class="troubleshoot-info">DEBUG</span>:')
           .replace(/\INFO\:/g, '<span class="troubleshoot-success">INFO</span>:')
           .replace(/\ERROR\:/g, '<span class="troubleshoot-error">ERROR</span>:'));
