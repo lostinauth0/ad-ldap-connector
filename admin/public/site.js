@@ -218,7 +218,8 @@
 
       $('#troubleshoot-progress').hide();
       $('#troubleshoot-output').show();
-      $('#troubleshoot-output').html(data
+      const cleanedData = DOMPurify.sanitize(data, { ALLOWED_TAGS: ['#text'] });
+      $('#troubleshoot-output').html(cleanedData
         .replace(/\info\:/g, '<span class="troubleshoot-info">info</span>:')
         .replace(/\warn\:/g, '<span class="troubleshoot-warning">warn</span>:')
         .replace(/\error\:/g, '<span class="troubleshoot-error">error</span>:')
@@ -255,7 +256,8 @@
   function getUpdaterLogs() {
     $.get('/updater/logs?_=' + new Date().getTime(), function(data) {
       if (data && data.length > 0) {
-        $('#update-logs').html(data
+        const cleanedData = DOMPurify.sanitize(data, { ALLOWED_TAGS: ['#text'] });
+        $('#update-logs').html(cleanedData
           .replace(/\DEBUG\:/g, '<span class="troubleshoot-info">DEBUG</span>:')
           .replace(/\INFO\:/g, '<span class="troubleshoot-success">INFO</span>:')
           .replace(/\ERROR\:/g, '<span class="troubleshoot-error">ERROR</span>:'));
