@@ -22,7 +22,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Clean workspace
-        run: rm -rf ${{ github.workspace }}/*
+        run: rm -Recurse -Force ${{ github.workspace }}/*
       - name: Application Dependencies
         run: |
           npm ci
