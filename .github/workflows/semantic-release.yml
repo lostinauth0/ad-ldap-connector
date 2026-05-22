@@ -26,6 +26,8 @@ jobs:
       - name: Application Dependencies
         run: |
           npm ci
+      - name: Fetch tags (force overwrite local)
+        run: git fetch --tags --force
       - name: Semantic Release
         id: semantic_release
         env:
